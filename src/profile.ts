@@ -34,7 +34,7 @@ export function xpProgress(xp: number): { current: number; needed: number; level
 // ── Achievement definitions ───────────────────────────────────────────────────
 
 export interface AchievementDef {
-  id: string; name: string; stat: string;
+  id: string; name: string; desc: string; stat: string;
   tiers: number[]; xpPerTier: number[];
 }
 
@@ -46,39 +46,39 @@ const SESSION = [1,5,10,25,50,100,250,500,1000,2500];
 
 export const ACHIEVEMENTS: AchievementDef[] = [
   // Cooking
-  { id:'shoulders',           name:'Pit Master',        stat:'shoulders_smoked',      tiers:STD,     xpPerTier:STD_XP  },
-  { id:'hotdogs',             name:'Dog Stand',          stat:'hotdogs_grilled',       tiers:STD,     xpPerTier:STD_XP  },
-  { id:'patties',             name:'Burger Flipper',     stat:'patties_grilled',       tiers:STD,     xpPerTier:STD_XP  },
-  { id:'cheese',              name:'Cheesy',             stat:'cheese_melted',         tiers:STD,     xpPerTier:STD_XP  },
-  { id:'fries',               name:'Fry Cook',           stat:'fries_fried',           tiers:STD,     xpPerTier:STD_XP  },
-  { id:'pups',                name:'Pup Wrangler',       stat:'pups_fried',            tiers:STD,     xpPerTier:STD_XP  },
-  // Individual plate sales (sandwich name from order name prefix)
-  { id:'sold_hamburger',      name:'Hamburger Hero',     stat:'sold_hamburger',        tiers:STD,     xpPerTier:STD_XP  },
-  { id:'sold_cheeseburger',   name:'Cheese Please',      stat:'sold_cheeseburger',     tiers:STD,     xpPerTier:STD_XP  },
-  { id:'sold_dbl_burger',     name:'Double Down',        stat:'sold_dbl_burger',       tiers:STD,     xpPerTier:STD_XP  },
-  { id:'sold_dbl_cheese',     name:'Double Cheese',      stat:'sold_dbl_cheeseburger', tiers:STD,     xpPerTier:STD_XP  },
-  { id:'sold_hotdog',         name:'Hot Diggity',        stat:'sold_hotdog',           tiers:STD,     xpPerTier:STD_XP  },
-  { id:'sold_bbq_sand',       name:'Pit Stop',           stat:'sold_bbq_sand',         tiers:STD,     xpPerTier:STD_XP  },
-  { id:'sold_bbq_plate',      name:'Full Rack',          stat:'sold_bbq_plate',        tiers:STD,     xpPerTier:STD_XP  },
-  { id:'sold_combo',          name:'Combo Artist',       stat:'sold_combo',            tiers:STD,     xpPerTier:STD_XP  },
+  { id:'shoulders',           name:'Pit Master',        desc:'Smoke pork shoulders in the smoker',              stat:'shoulders_smoked',      tiers:STD,     xpPerTier:STD_XP  },
+  { id:'hotdogs',             name:'Dog Stand',          desc:'Grill hotdogs to order',                          stat:'hotdogs_grilled',       tiers:STD,     xpPerTier:STD_XP  },
+  { id:'patties',             name:'Burger Flipper',     desc:'Grill burger patties',                            stat:'patties_grilled',       tiers:STD,     xpPerTier:STD_XP  },
+  { id:'cheese',              name:'Cheesy',             desc:'Melt cheese slices on the grill',                 stat:'cheese_melted',         tiers:STD,     xpPerTier:STD_XP  },
+  { id:'fries',               name:'Fry Cook',           desc:'Fry baskets of french fries',                     stat:'fries_fried',           tiers:STD,     xpPerTier:STD_XP  },
+  { id:'pups',                name:'Pup Wrangler',       desc:'Fry corn dog pups in the fryer',                  stat:'pups_fried',            tiers:STD,     xpPerTier:STD_XP  },
+  // Individual plate sales
+  { id:'sold_hamburger',      name:'Hamburger Hero',     desc:'Sell hamburgers to customers',                    stat:'sold_hamburger',        tiers:STD,     xpPerTier:STD_XP  },
+  { id:'sold_cheeseburger',   name:'Cheese Please',      desc:'Sell cheeseburgers to customers',                 stat:'sold_cheeseburger',     tiers:STD,     xpPerTier:STD_XP  },
+  { id:'sold_dbl_burger',     name:'Double Down',        desc:'Sell double burgers to customers',                    stat:'sold_dbl_burger',       tiers:STD,     xpPerTier:STD_XP  },
+  { id:'sold_dbl_cheese',     name:'Double Cheese',      desc:'Sell double cheeseburgers to customers',           stat:'sold_dbl_cheeseburger', tiers:STD,     xpPerTier:STD_XP  },
+  { id:'sold_hotdog',         name:'Hot Diggity',        desc:'Sell hotdogs to customers',                       stat:'sold_hotdog',           tiers:STD,     xpPerTier:STD_XP  },
+  { id:'sold_bbq_sand',       name:'Pit Stop',           desc:'Sell BBQ sandwiches to customers',                stat:'sold_bbq_sand',         tiers:STD,     xpPerTier:STD_XP  },
+  { id:'sold_bbq_plate',      name:'Full Rack',          desc:'Sell BBQ plates to customers',                    stat:'sold_bbq_plate',        tiers:STD,     xpPerTier:STD_XP  },
+  { id:'sold_combo',          name:'Combo Artist',       desc:'Sell combo meals (sandwich + side)',               stat:'sold_combo',            tiers:STD,     xpPerTier:STD_XP  },
   // Aggregate gameplay
-  { id:'plates',              name:'Short Order Cook',   stat:'plates_completed',      tiers:STD,     xpPerTier:STD_XP  },
-  { id:'grill_uses',          name:'Grill Master',       stat:'grill_uses',            tiers:STD,     xpPerTier:STD_XP  },
-  { id:'fryer_uses',          name:'Deep Fryer',         stat:'fryer_uses',            tiers:STD,     xpPerTier:STD_XP  },
-  { id:'bbq_chops',           name:'Knife Skills',       stat:'bbq_chops',             tiers:STD,     xpPerTier:STD_XP  },
-  { id:'customers_lost',      name:'Customer Service',   stat:'customers_lost',        tiers:STD,     xpPerTier:STD_XP  },
-  { id:'food_burned',         name:'Smoke Show',         stat:'food_burned',           tiers:STD,     xpPerTier:STD_XP  },
+  { id:'plates',              name:'Short Order Cook',   desc:'Complete customer orders from start to finish',   stat:'plates_completed',      tiers:STD,     xpPerTier:STD_XP  },
+  { id:'grill_uses',          name:'Grill Master',       desc:'Place food on the grill',                         stat:'grill_uses',            tiers:STD,     xpPerTier:STD_XP  },
+  { id:'fryer_uses',          name:'Deep Fryer',         desc:'Place food in the fryer',                         stat:'fryer_uses',            tiers:STD,     xpPerTier:STD_XP  },
+  { id:'bbq_chops',           name:'Knife Skills',       desc:'Chop smoked pork at the chop station',            stat:'bbq_chops',             tiers:STD,     xpPerTier:STD_XP  },
+  { id:'customers_lost',      name:'Customer Service',   desc:'Let customers walk out without being served',     stat:'customers_lost',        tiers:STD,     xpPerTier:STD_XP  },
+  { id:'food_burned',         name:'Smoke Show',         desc:'Burn food by leaving it on too long',             stat:'food_burned',           tiers:STD,     xpPerTier:STD_XP  },
   // Sessions
-  { id:'solo_sessions',       name:'Solo Chef',          stat:'solo_sessions',         tiers:SESSION, xpPerTier:STD_XP  },
-  { id:'coop_sessions',       name:'Team Player',        stat:'coop_sessions',         tiers:SESSION, xpPerTier:STD_XP  },
-  // Game stage reached (recorded as max value)
-  { id:'max_stage',           name:'Rising Star',        stat:'max_stage',             tiers:[2,3,4,5,6,7,8,9,10], xpPerTier:[100,200,300,400,500,600,700,800,900] },
+  { id:'solo_sessions',       name:'Solo Chef',          desc:'Play solo game sessions',                         stat:'solo_sessions',         tiers:SESSION, xpPerTier:STD_XP  },
+  { id:'coop_sessions',       name:'Team Player',        desc:'Play co-op game sessions with a partner',         stat:'coop_sessions',         tiers:SESSION, xpPerTier:STD_XP  },
+  // Game stage reached
+  { id:'max_stage',           name:'Rising Star',        desc:'Reach higher stages in a single run',             stat:'max_stage',             tiers:[2,3,4,5,6,7,8,9,10], xpPerTier:[100,200,300,400,500,600,700,800,900] },
   // Dollar-based (in cents)
-  { id:'total_sales',         name:'Big Bucks',          stat:'total_sales',           tiers:DOLLAR,  xpPerTier:DLRXP   },
-  { id:'total_profit',        name:'In the Black',       stat:'total_profit',          tiers:DOLLAR,  xpPerTier:DLRXP   },
-  { id:'total_food_cost',     name:'COGS King',          stat:'total_food_cost',       tiers:DOLLAR,  xpPerTier:DLRXP   },
-  { id:'total_waste',         name:'Waste Not',          stat:'total_waste',           tiers:DOLLAR,  xpPerTier:DLRXP   },
-  { id:'total_labor',         name:'Payroll Pro',        stat:'total_labor',           tiers:DOLLAR,  xpPerTier:DLRXP   },
+  { id:'total_sales',         name:'Big Bucks',          desc:'Total revenue earned across all sessions',        stat:'total_sales',           tiers:DOLLAR,  xpPerTier:DLRXP   },
+  { id:'total_profit',        name:'In the Black',       desc:'Total profit earned across all sessions',         stat:'total_profit',          tiers:DOLLAR,  xpPerTier:DLRXP   },
+  { id:'total_food_cost',     name:'COGS King',          desc:'Total food cost spent across all sessions',       stat:'total_food_cost',       tiers:DOLLAR,  xpPerTier:DLRXP   },
+  { id:'total_waste',         name:'Waste Not',          desc:'Total value of food wasted across all sessions',  stat:'total_waste',           tiers:DOLLAR,  xpPerTier:DLRXP   },
+  { id:'total_labor',         name:'Payroll Pro',        desc:'Total labor cost paid across all sessions',       stat:'total_labor',           tiers:DOLLAR,  xpPerTier:DLRXP   },
 ];
 
 // ── Module state ──────────────────────────────────────────────────────────────

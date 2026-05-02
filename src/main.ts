@@ -568,23 +568,39 @@ function openAchievementsOverlay(): void {
   const overlay = document.getElementById('achievementsOverlay')!;
   const list    = document.getElementById('achievementsList')!;
   const prof    = getProfile();
+  const ROMAN   = ['I','II','III','IV','V','VI','VII','VIII','IX','X'];
+  const isDollar = (stat: string) => stat.startsWith('total_');
+  const fmt = (v: number, dollar: boolean) =>
+    dollar ? `$${(v / 100).toLocaleString()}` : v.toLocaleString();
+
   list.innerHTML = ACHIEVEMENTS.map(ach => {
-    const cur   = prof?.achievements[ach.id] ?? -1;
-    const stat  = prof?.stats[ach.stat] ?? 0;
-    const ROMAN = ['I','II','III','IV','V','VI','VII','VIII','IX','X'];
+    const cur    = prof?.achievements[ach.id] ?? -1;
+    const stat   = prof?.stats[ach.stat] ?? 0;
+    const dollar = isDollar(ach.stat);
+    const maxed  = cur >= ach.tiers.length - 1;
+    const nextTier = maxed ? ach.tiers[ach.tiers.length - 1] : ach.tiers[cur + 1];
+    const pct    = maxed ? 100 : Math.min(100, Math.round((stat / nextTier) * 100));
+
     const tiers = ach.tiers.map((t, i) => {
       const unlocked = i <= cur;
-      const cls = unlocked ? 'ach-tier unlocked' : 'ach-tier';
-      const label = t >= 100000 ? `$${(t/100).toLocaleString()}` : t.toLocaleString();
-      return `<span class="${cls}" title="Tier ${ROMAN[i]}: ${label}">${ROMAN[i] ?? i+1}</span>`;
+      const label = t >= 100000 ? `$${(t / 100).toLocaleString()}` : t.toLocaleString();
+      return `<span class="ach-tier${unlocked ? ' unlocked' : ''}" title="Tier ${ROMAN[i]}: ${label}">${ROMAN[i] ?? i + 1}</span>`;
     }).join('');
-    const statDisp = ach.stat.startsWith('total_') || ach.stat === 'total_profit'
-      ? `$${(stat/100).toLocaleString()}`
-      : stat.toLocaleString();
-    return `<div class="ach-row ${cur >= 0 ? 'ach-has' : ''}">
-      <div class="ach-name">${ach.name}</div>
-      <div class="ach-stat">${statDisp}</div>
-      <div class="ach-tiers">${tiers}</div>
+
+    const progressLabel = maxed
+      ? 'ALL TIERS COMPLETE'
+      : `${fmt(stat, dollar)} / ${fmt(nextTier, dollar)}`;
+
+    return `<div class="ach-row${cur >= 0 ? ' ach-has' : ''}">
+      <div class="ach-row-top">
+        <span class="ach-name">${ach.name}</span>
+        <div class="ach-tiers">${tiers}</div>
+      </div>
+      <div class="ach-desc">${ach.desc}</div>
+      <div class="ach-progress">
+        <div class="ach-bar"><div class="ach-bar-fill" style="width:${pct}%"></div></div>
+        <span class="ach-progress-text">${progressLabel}</span>
+      </div>
     </div>`;
   }).join('');
   overlay.style.display = 'flex';

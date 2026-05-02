@@ -263,15 +263,19 @@
     #achievementsClose:hover { background: #221; color: #f84; }
     #achievementsList { flex: 1; overflow-y: auto; padding: 0.5rem 1rem; }
     .ach-row {
-      display: flex; align-items: center; gap: 0.6rem;
-      padding: 0.4rem 0.5rem; border-bottom: 1px solid #1a1208; font-size: 0.78rem;
+      padding: 0.5rem 0.4rem; border-bottom: 1px solid #1a1208; font-size: 0.78rem;
     }
-    .ach-name  { color: #998; width: 140px; flex-shrink: 0; }
+    .ach-row-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.18rem; }
+    .ach-name  { color: #776; font-size: 0.78rem; }
     .ach-row.ach-has .ach-name { color: #fa4; }
-    .ach-stat  { color: #665; width: 80px; text-align: right; flex-shrink: 0; font-size: 0.72rem; }
-    .ach-tiers { display: flex; gap: 4px; flex-wrap: wrap; }
-    .ach-tier  { padding: 1px 5px; border: 1px solid #2a1e10; border-radius: 2px; font-size: 0.65rem; color: #443; }
+    .ach-desc  { color: #554; font-size: 0.64rem; margin-bottom: 0.28rem; letter-spacing: 0.01em; }
+    .ach-tiers { display: flex; gap: 3px; flex-wrap: wrap; }
+    .ach-tier  { padding: 1px 5px; border: 1px solid #2a1e10; border-radius: 2px; font-size: 0.62rem; color: #443; }
     .ach-tier.unlocked { border-color: #fa4; color: #fa4; }
+    .ach-progress { display: flex; align-items: center; gap: 0.5rem; }
+    .ach-bar { flex: 1; height: 4px; background: #1a1208; border-radius: 2px; overflow: hidden; }
+    .ach-bar-fill { height: 100%; background: linear-gradient(90deg,#f84,#fa4); border-radius: 2px; }
+    .ach-progress-text { font-size: 0.6rem; color: #665; white-space: nowrap; flex-shrink: 0; }
 
     /* Achievements button */
     #lobbyAchievements {
