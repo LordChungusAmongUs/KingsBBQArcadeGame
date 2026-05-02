@@ -364,7 +364,7 @@ function guestLoop(now: number): void {
       }};
     }
 
-    render(displayGs);
+    try { render(displayGs); } catch (e) { console.error('[guest render]', e); }
   } else {
     const ctx = canvas.getContext('2d')!;
     ctx.fillStyle = '#0a0804'; ctx.fillRect(0, 0, GAME_W, GAME_H);

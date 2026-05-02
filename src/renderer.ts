@@ -183,6 +183,7 @@ function drawCookSlots(s: Station): void {
 
   for (let i = 0; i < s.slots.length; i++) {
     const slot = s.slots[i];
+    if (!slot) continue;
     const col = i % cols;
     const row = Math.floor(i / cols);
     const sx = s.x + PAD + col * sw;
