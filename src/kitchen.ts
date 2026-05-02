@@ -145,8 +145,8 @@ export function placeOnStation(s: Station, food: FoodId): boolean {
       slot.food = food;
       slot.state = 'cooking';
       slot.timer = 0;
-      slot.smokerPlacedLevel = undefined;
-      slot.smokerPlacedAtTimer = undefined;
+      delete slot.smokerPlacedLevel;
+      delete slot.smokerPlacedAtTimer;
       return true;
     }
   }
