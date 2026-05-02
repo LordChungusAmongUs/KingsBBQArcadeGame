@@ -141,6 +141,6 @@ export const OVERTIME_LABOR_RATE   = 15;   // cents/sec during overtime ($0.15/s
 export const OVERHEAD_COST         = 2000; // $20 overhead deducted at end of each level
 export const STARTING_MONEY        = 2500; // $25 starting cash
 export const BASE_MAX_FAILS        = 2;
-export const UPSET_THRESHOLDS      = [5000, 10000, 20000]; // $50, $100, $200 → earn 1 extra star each
+export const UPSET_THRESHOLDS      = Array.from({ length: 20 }, (_, i) => (i + 1) * 5000); // $50, $100, $150 ... $1000
 export const PLAYER_SPEED  = 330;
 export const INTERACT_RANGE = 30;
