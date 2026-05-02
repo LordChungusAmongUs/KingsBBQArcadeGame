@@ -338,6 +338,8 @@ const lobbyScreen = document.getElementById('lobbyScreen')!;
 function openLobbyScreen(): void {
   menu.style.display = 'none';
   lobbyScreen.style.display = 'flex';
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+  (window.screen.orientation as any)?.lock?.('landscape').catch(() => {});
   if (!user) {
     document.getElementById('lobbyAuthRequired')!.style.display = 'flex';
     document.getElementById('lobbyContent')!.style.display      = 'none';

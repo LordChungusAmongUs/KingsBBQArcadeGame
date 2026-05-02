@@ -104,6 +104,33 @@ export function pushGuestInput(inp: P2InputData): void {
 
 // ── Snapshot helpers ──────────────────────────────────────────────────────────
 
+// RTDB strips null array elements and returns {0:a, 2:c} instead of [a,null,c].
+// toArr handles dense arrays; toSparseArr restores null gaps for station slots.
+function toArr<T>(v: unknown): T[] {
+  if (!v) return [];
+  if (Array.isArray(v)) return v as T[];
+  if (typeof v === 'object') {
+    const obj = v as Record<string, T>;
+    return Object.keys(obj).sort((a, b) => +a - +b).map(k => obj[k]);
+  }
+  return [];
+}
+
+function toSparseArr<T>(v: unknown, len: number): (T | null)[] {
+  if (!v) return Array(len).fill(null);
+  if (Array.isArray(v)) {
+    while (v.length < len) v.push(null);
+    return v as (T | null)[];
+  }
+  const result: (T | null)[] = Array(len).fill(null);
+  const obj = v as Record<string, T>;
+  for (const k of Object.keys(obj)) {
+    const i = +k;
+    if (i >= 0 && i < len) result[i] = obj[k];
+  }
+  return result;
+}
+
 function buildSnapshot(gs: GameState): GameSnapshot {
   return {
     p:  { x: gs.player.x,  y: gs.player.y,  held: gs.player.held,  facing: gs.player.facing,  walkFrame: gs.player.walkFrame },
@@ -122,15 +149,15 @@ function buildSnapshot(gs: GameState): GameSnapshot {
 
 function snapshotToGameState(snap: GameSnapshot): GameState {
   const stations = buildStations();
-  for (const ss of snap.stations ?? []) {
+  for (const ss of toArr<{ id: string; slots: unknown }>(snap.stations)) {
     const st = stations.find(s => s.id === ss.id);
-    if (st) st.slots = ss.slots;
+    if (st) st.slots = toSparseArr(ss.slots, st.slots.length) as GameState['stations'][0]['slots'];
   }
   return {
     player:  { ...snap.p,  vx: 0, vy: 0, radius: 18 },
     player2: snap.p2 ? { ...snap.p2, vx: 0, vy: 0, radius: 18 } : null,
     coop: true, stations,
-    orders: snap.orders ?? [], plates: snap.plates ?? [], staged: snap.staged ?? [],
+    orders: toArr(snap.orders), plates: toArr(snap.plates), staged: toArr(snap.staged),
     score: snap.score, level: snap.level, levelTimer: snap.levelTimer, nextOrderIn: 0,
     completed: snap.completed, failed: snap.failed,
     phase: snap.phase as GameState['phase'],
