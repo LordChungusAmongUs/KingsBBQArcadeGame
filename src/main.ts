@@ -397,15 +397,12 @@ function startOnlineGame(lobbyId: string, asHost: boolean): void {
           p2PredFacing = gs.player2.facing; p2PredWalk = gs.player2.walkFrame;
         } else {
           const drift = Math.hypot(p2PredX - gs.player2.x, p2PredY! - gs.player2.y);
-          if (drift > 60) {
-            // Large drift (wall teleport, etc.) — snap immediately
+          if (drift > 80) {
+            // Very large drift (interact teleport) — snap immediately
             p2PredX = gs.player2.x; p2PredY = gs.player2.y;
             p2PredFacing = gs.player2.facing; p2PredWalk = gs.player2.walkFrame;
-          } else if (drift > 2) {
-            // Small drift — gently pull prediction toward authoritative position
-            p2PredX = p2PredX! + (gs.player2.x - p2PredX!) * 0.25;
-            p2PredY = p2PredY! + (gs.player2.y - p2PredY!) * 0.25;
           }
+          // Small drift: gradual per-frame correction applied in guestLoop, not here
         }
       }
       // Feed P1 interpolation: lerp from previous sample toward this one
@@ -478,6 +475,16 @@ function guestLoop(now: number): void {
         const p2tmp = { x: p2PredX, y: p2PredY, radius: 18 } as any;
         resolveCollisions(p2tmp, remoteGs.stations);
         p2PredX = p2tmp.x; p2PredY = p2tmp.y;
+      }
+      // Per-frame reconciliation: gently pull prediction toward authority each frame
+      // (6% per frame at ~60fps ≈ smooth correction over ~300ms, no 33Hz jitter)
+      if (remoteGs.player2) {
+        const authX = remoteGs.player2.x, authY = remoteGs.player2.y;
+        const err = Math.hypot(p2PredX! - authX, p2PredY! - authY);
+        if (err > 15) {
+          p2PredX = p2PredX! + (authX - p2PredX!) * 0.06;
+          p2PredY = p2PredY! + (authY - p2PredY!) * 0.06;
+        }
       }
       displayGs = { ...displayGs, player2: { ...displayGs.player2,
         x: p2PredX!, y: p2PredY!, facing: p2PredFacing, walkFrame: p2PredWalk,
