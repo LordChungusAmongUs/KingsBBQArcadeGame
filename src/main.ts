@@ -517,14 +517,15 @@ function guestLoop(now: number): void {
         resolveCollisions(p2tmp, remoteGs.stations);
         p2PredX = p2tmp.x; p2PredY = p2tmp.y;
       }
-      // Per-frame reconciliation: gently pull prediction toward authority each frame
-      // (6% per frame at ~60fps ≈ smooth correction over ~300ms, no 33Hz jitter)
-      if (remoteGs.player2) {
+      // Reconcile only while standing still — correcting during movement creates drag/glide.
+      // Large teleport drifts (interactions) are caught by the 80px snap in the snapshot cb.
+      const isMoving = inp.up || inp.down || inp.left || inp.right;
+      if (!isMoving && remoteGs.player2) {
         const authX = remoteGs.player2.x, authY = remoteGs.player2.y;
         const err = Math.hypot(p2PredX! - authX, p2PredY! - authY);
-        if (err > 15) {
-          p2PredX = p2PredX! + (authX - p2PredX!) * 0.06;
-          p2PredY = p2PredY! + (authY - p2PredY!) * 0.06;
+        if (err > 4) {
+          p2PredX = p2PredX! + (authX - p2PredX!) * 0.2;
+          p2PredY = p2PredY! + (authY - p2PredY!) * 0.2;
         }
       }
       displayGs = { ...displayGs, player2: { ...displayGs.player2,
