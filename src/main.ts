@@ -16,6 +16,7 @@ import {
 import {
   startHostSync, stopHostSync, startGuestSync, stopGuestSync, pushGuestInput,
   setPresence, clearPresence, watchPresence,
+  seekMatch, notifyMatch, watchForMatch, leaveMatchmaking,
   type P2InputData, type PresenceUser,
 } from './netplay';
 
@@ -114,6 +115,8 @@ let unsubSentInvite: (() => void) | null = null;
 let pendingInviteId: string | null = null;      // invite I sent
 let pendingInviteLobbyId: string | null = null; // lobby I created for invite
 let pendingInviteToUid: string | null = null;   // uid of the player I invited
+let isMatchmaking = false;
+let stopMatchwatch: (() => void) | null = null;
 let receivedInvites: InviteData[] = [];         // invites I received
 let onlineUsers: PresenceUser[] = [];
 
@@ -343,11 +346,14 @@ function openLobbyScreen(): void {
   (window.screen.orientation as any)?.lock?.('landscape').catch(() => {});
   if (!user) {
     document.getElementById('lobbyAuthRequired')!.style.display = 'flex';
+    document.getElementById('lobbyToolbar')!.style.display      = 'none';
     document.getElementById('lobbyContent')!.style.display      = 'none';
     return;
   }
   document.getElementById('lobbyAuthRequired')!.style.display = 'none';
+  document.getElementById('lobbyToolbar')!.style.display      = 'flex';
   document.getElementById('lobbyContent')!.style.display      = 'flex';
+  renderMatchmakingUI();
 
   setPresence(user.uid, user.displayName ?? 'Player', user.photoURL ?? '');
   unsubPresence   = watchPresence(users => { onlineUsers = users; renderOnlineUsers(); });
@@ -357,6 +363,7 @@ function openLobbyScreen(): void {
 
 function closeLobbyScreen(): void {
   lobbyScreen.style.display = 'none';
+  cancelMatchmakingFn();
   if (user) clearPresence(user.uid);
   unsubGlobalChat?.(); unsubGlobalChat = null;
   unsubPresence?.();   unsubPresence   = null;
@@ -514,6 +521,48 @@ async function handleDeclineInvite(invite: InviteData): Promise<void> {
   await respondToInvite(invite.id, 'declined');
 }
 
+// ─── Matchmaking ─────────────────────────────────────────────────────────────
+
+function renderMatchmakingUI(): void {
+  document.getElementById('lobbyActions')!.style.display      = isMatchmaking ? 'none' : 'flex';
+  document.getElementById('matchmakingStatus')!.style.display = isMatchmaking ? 'flex' : 'none';
+}
+
+async function startMatchmakingFn(): Promise<void> {
+  if (!user || isMatchmaking) return;
+  isMatchmaking = true;
+  renderMatchmakingUI();
+  try {
+    const claimed = await seekMatch(user.uid, user.displayName ?? 'Player', user.photoURL ?? '');
+    if (!isMatchmaking) return; // cancelled during async await
+    if (claimed) {
+      // We claimed a waiting player — we're the host
+      const lobbyId = await createLobby(user.uid, user.displayName ?? 'Player', user.photoURL ?? '');
+      await notifyMatch(claimed.uid, lobbyId);
+      isMatchmaking = false;
+      startOnlineGame(lobbyId, true);
+    } else {
+      // We're now waiting in the queue — watch for host to notify us
+      stopMatchwatch = watchForMatch(user.uid, lobbyId => {
+        isMatchmaking = false;
+        stopMatchwatch = null;
+        startOnlineGame(lobbyId, false);
+      });
+    }
+  } catch {
+    isMatchmaking = false;
+    renderMatchmakingUI();
+  }
+}
+
+function cancelMatchmakingFn(): void {
+  if (!isMatchmaking) return;
+  isMatchmaking = false;
+  stopMatchwatch?.(); stopMatchwatch = null;
+  if (user) leaveMatchmaking(user.uid);
+  renderMatchmakingUI();
+}
+
 function escHtml(s: string): string {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -527,6 +576,11 @@ document.getElementById('globalChatSend')!.addEventListener('click', handleGloba
 document.getElementById('globalChatInput')!.addEventListener('keydown', e => {
   if (e.key === 'Enter') handleGlobalSend();
 });
+document.getElementById('lobbyPlaySolo')!.addEventListener('click', () => {
+  closeLobbyScreen(); isCoop = false; startLevel(1, STARTING_MONEY);
+});
+document.getElementById('lobbyPlayCoop')!.addEventListener('click', startMatchmakingFn);
+document.getElementById('cancelMatchmakingBtn')!.addEventListener('click', cancelMatchmakingFn);
 
 // ─── Menu buttons ─────────────────────────────────────────────────────────────
 

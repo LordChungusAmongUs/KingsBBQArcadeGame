@@ -1,4 +1,4 @@
-import { ref, set, remove, onValue, off, onDisconnect } from 'firebase/database';
+import { ref, set, remove, onValue, off, onDisconnect, runTransaction } from 'firebase/database';
 import { rtdb } from './firebase';
 import type { GameState } from './types';
 import { buildStations } from './kitchen';
@@ -26,6 +26,58 @@ export function watchPresence(cb: (users: PresenceUser[]) => void): () => void {
     cb(Object.entries(data).map(([uid, v]) => ({ uid, ...(v as any) } as PresenceUser)));
   });
   return () => off(r);
+}
+
+// ── Matchmaking ───────────────────────────────────────────────────────────────
+
+export interface MatchmakingEntry { uid: string; name: string; photo: string; }
+
+// Atomically join the matchmaking queue.
+// Returns the entry we claimed (caller becomes host), or null (caller is now waiting as guest).
+export async function seekMatch(
+  uid: string, name: string, photo: string,
+): Promise<MatchmakingEntry | null> {
+  const seekRef = ref(rtdb, 'matchmaking/seeking');
+  let claimed: MatchmakingEntry | null = null;
+  await runTransaction(seekRef, current => {
+    if (!current) {
+      return { uid, name, photo };           // slot empty → wait here
+    } else if (current.uid === uid) {
+      return current;                        // already in queue
+    } else {
+      claimed = { uid: current.uid, name: current.name, photo: current.photo };
+      return null;                           // claim the waiting player, clear slot
+    }
+  });
+  if (!claimed) onDisconnect(seekRef).remove(); // auto-clean if we disconnect while waiting
+  return claimed;
+}
+
+// Host calls this to tell the guest which lobby to join.
+export function notifyMatch(toUid: string, lobbyId: string): Promise<void> {
+  const r = ref(rtdb, `matchmaking/match/${toUid}`);
+  onDisconnect(r).remove();
+  return set(r, { lobbyId });
+}
+
+// Guest calls this to watch for the host's lobby notification.
+// Returns a cancel function.
+export function watchForMatch(uid: string, cb: (lobbyId: string) => void): () => void {
+  const r = ref(rtdb, `matchmaking/match/${uid}`);
+  onValue(r, snap => {
+    const val = snap.val() as { lobbyId: string } | null;
+    if (val?.lobbyId) { off(r); remove(r).catch(() => {}); cb(val.lobbyId); }
+  });
+  return () => { off(r); remove(r).catch(() => {}); };
+}
+
+// Remove self from matchmaking (cancel or cleanup).
+export function leaveMatchmaking(uid: string): void {
+  runTransaction(ref(rtdb, 'matchmaking/seeking'), cur => {
+    if (cur?.uid === uid) return null;
+    return cur;
+  }).catch(() => {});
+  remove(ref(rtdb, `matchmaking/match/${uid}`)).catch(() => {});
 }
 
 // ── P2 input / game sync ──────────────────────────────────────────────────────
