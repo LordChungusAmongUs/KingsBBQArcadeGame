@@ -367,6 +367,34 @@
     #rotateOverlay p { color: #f84; font-size: 1rem; letter-spacing: 0.2em; text-align: center; }
     @media (orientation: portrait) and (hover: none) { #rotateOverlay { display: flex; } }
 
+    /* ── Post-game overlays ─────────────────────────────────────────── */
+    #lbTapHint {
+      display: none; position: absolute; inset: 0; z-index: 30;
+      align-items: flex-end; justify-content: center; padding-bottom: 6%;
+      pointer-events: all; cursor: pointer;
+    }
+    #lbTapHint span {
+      color: #fa4; font-size: 0.85rem; letter-spacing: 0.25em;
+      animation: pgPulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pgPulse { 0%,100%{opacity:0.25} 50%{opacity:1} }
+    #postgameOverlay {
+      display: none; position: absolute; inset: 0; z-index: 35;
+      background: rgba(8,6,4,0.94); flex-direction: column;
+      align-items: center; justify-content: center; gap: 0.9rem;
+    }
+    #pgScoreDisplay { color: #fa4; font-size: 1.1rem; letter-spacing: 0.2em; margin-bottom: 0.5rem; text-align: center; }
+    .pg-btn {
+      padding: 0.85rem 0; width: 260px; background: transparent;
+      font-family: inherit; font-size: 0.9rem; letter-spacing: 0.2em;
+      cursor: pointer; border: 1px solid #554; color: #998;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      touch-action: manipulation;
+    }
+    .pg-btn:hover, .pg-btn:active { background: #1a1208; border-color: #fa4; color: #fa4; }
+    #pgPlayAgain { border-color: #f84; color: #f84; }
+    #pgPlayAgain:hover, #pgPlayAgain:active { background: #1a0804; border-color: #fa4; color: #fa4; }
+
     /* ── Mobile menu tweaks ─────────────────────────────────────────── */
     @media (max-width: 600px) {
       #menuTitle { font-size: 2rem; }
@@ -547,6 +575,17 @@
       <div id="neScore"></div>
       <input id="neInput" type="text" maxlength="3" autocomplete="off" spellcheck="false" placeholder="AAA" />
       <button id="neSubmit">CONFIRM</button>
+    </div>
+
+    <!-- ── Leaderboard tap-to-continue hint ─────────────────────────── -->
+    <div id="lbTapHint"><span>TAP TO CONTINUE</span></div>
+
+    <!-- ── Post-game options overlay ──────────────────────────────────── -->
+    <div id="postgameOverlay">
+      <div id="pgScoreDisplay"></div>
+      <button class="pg-btn" id="pgPlayAgain">PLAY AGAIN</button>
+      <button class="pg-btn" id="pgLobby">LOBBY</button>
+      <button class="pg-btn" id="pgMainMenu">MAIN MENU</button>
     </div>
 
     <!-- ── Portrait rotation blocker ────────────────────────────────── -->

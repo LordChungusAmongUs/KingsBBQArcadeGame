@@ -155,6 +155,8 @@ let leaderboardReturn: 'menu' | 'pause' = 'menu';
 const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ';
 let nameChars = ['A','A','A'], nameCursor = 0;
 let leaderboardEntries: LeaderboardEntry[] = [];
+let lastGameWasCoop = false;
+let lastGameWasOnline = false;
 let lastGameScore = 0, lastGameLevel = 1;
 
 // ─── Online co-op state ───────────────────────────────────────────────────────
@@ -273,6 +275,8 @@ async function updateMenuLeaderboard(): Promise<void> {
 // ─── Name entry ───────────────────────────────────────────────────────────────
 
 function goToNameEntry(g: GameState): void {
+  lastGameWasCoop = isCoop;
+  lastGameWasOnline = isOnlineGame;
   if (isOnlineGame && isOnlineHost) cleanupOnlineGame();
   recordLevelStats(g);
   flushSession().catch(console.error);
@@ -300,7 +304,44 @@ function submitName(): void {
   hideMobileNameEntry();
   leaderboardEntries = saveEntry(name, lastGameScore, lastGameLevel);
   if (user) saveCloudScore(user.uid, user.displayName??'', user.photoURL??'', name, lastGameScore, lastGameLevel).catch(()=>{});
+  enterLeaderboard();
+}
+
+function enterLeaderboard(): void {
   screen = 'leaderboard';
+  if (leaderboardReturn !== 'menu') return;
+  const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  if (isTouch) document.getElementById('lbTapHint')!.style.display = 'flex';
+}
+
+function dismissLeaderboard(): void {
+  if (screen !== 'leaderboard') return;
+  document.getElementById('lbTapHint')!.style.display = 'none';
+  if (leaderboardReturn === 'pause') {
+    screen = 'game'; flushFrame(); requestAnimationFrame(loop);
+  } else {
+    showPostgameOverlay();
+  }
+}
+
+function showPostgameOverlay(): void {
+  const sign = lastGameScore < 0 ? '-' : '';
+  document.getElementById('pgScoreDisplay')!.textContent =
+    `SCORE: ${sign}$${(Math.abs(lastGameScore)/100).toFixed(2)}  ·  STAGE ${lastGameLevel}`;
+  const btn = document.getElementById('pgPlayAgain')!;
+  if (lastGameWasCoop && lastGameWasOnline) {
+    btn.textContent = 'PLAY CO-OP AGAIN';
+  } else if (lastGameWasCoop) {
+    btn.textContent = 'PLAY LOCAL CO-OP AGAIN';
+  } else {
+    btn.textContent = 'PLAY SOLO AGAIN';
+  }
+  document.getElementById('postgameOverlay')!.style.display = 'flex';
+  screen = 'game'; // stop leaderboard loop so loop() doesn't interfere
+}
+
+function hidePostgameOverlay(): void {
+  document.getElementById('postgameOverlay')!.style.display = 'none';
 }
 
 function showMobileNameEntry(): void {
@@ -515,11 +556,7 @@ function loop(now: number): void {
     flushFrame(); requestAnimationFrame(loop); return;
   }
   if (screen === 'leaderboard') {
-    if (input.interactPressed || input.p2InteractPressed) {
-      screen = 'game'; flushFrame();
-      if (leaderboardReturn === 'pause') requestAnimationFrame(loop); else showMenu();
-      return;
-    }
+    if (input.interactPressed || input.p2InteractPressed) { dismissLeaderboard(); return; }
     if (gs) render(gs); drawLeaderboard(leaderboardEntries, lastGameScore);
     flushFrame(); requestAnimationFrame(loop); return;
   }
@@ -872,6 +909,25 @@ document.getElementById('lobbyPlaySolo')!.addEventListener('click', () => {
 });
 document.getElementById('lobbyPlayCoop')!.addEventListener('click', startMatchmakingFn);
 document.getElementById('cancelMatchmakingBtn')!.addEventListener('click', cancelMatchmakingFn);
+
+// ─── Post-game overlay buttons ────────────────────────────────────────────────
+
+document.getElementById('lbTapHint')!.addEventListener('click', dismissLeaderboard);
+document.getElementById('pgMainMenu')!.addEventListener('click', () => {
+  hidePostgameOverlay(); showMenu();
+});
+document.getElementById('pgLobby')!.addEventListener('click', () => {
+  hidePostgameOverlay(); openLobbyScreen();
+});
+document.getElementById('pgPlayAgain')!.addEventListener('click', () => {
+  hidePostgameOverlay();
+  if (lastGameWasCoop && lastGameWasOnline) {
+    openLobbyScreen();
+  } else {
+    isCoop = lastGameWasCoop;
+    startLevel(1, STARTING_MONEY);
+  }
+});
 
 // ─── Menu buttons ─────────────────────────────────────────────────────────────
 
