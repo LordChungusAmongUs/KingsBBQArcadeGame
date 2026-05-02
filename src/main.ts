@@ -270,10 +270,20 @@ function startOnlineGame(lobbyId: string, asHost: boolean): void {
     remoteGs = null;
     startGuestSync(lobbyId, gs => {
       remoteGs = gs;
-      // Reseed P2 prediction from authoritative snapshot
       if (gs.player2) {
-        p2PredX = gs.player2.x; p2PredY = gs.player2.y;
-        p2PredFacing = gs.player2.facing; p2PredWalk = gs.player2.walkFrame;
+        if (p2PredX === null) {
+          // First snapshot: initialise prediction
+          p2PredX = gs.player2.x; p2PredY = gs.player2.y;
+          p2PredFacing = gs.player2.facing; p2PredWalk = gs.player2.walkFrame;
+        } else {
+          // Only snap if P2 has drifted far (wall collision host knows about, prediction doesn't)
+          const drift = Math.hypot(p2PredX - gs.player2.x, p2PredY! - gs.player2.y);
+          if (drift > 60) {
+            p2PredX = gs.player2.x; p2PredY = gs.player2.y;
+            p2PredFacing = gs.player2.facing; p2PredWalk = gs.player2.walkFrame;
+          }
+          // Small drift (< 60px) is normal input-lag; leave prediction alone so it stays smooth
+        }
       }
       // Feed P1 interpolation: lerp from previous sample toward this one
       p1Prev = p1Curr ?? { x: gs.player.x, y: gs.player.y, facing: gs.player.facing, walkFrame: gs.player.walkFrame, t: Date.now() };
