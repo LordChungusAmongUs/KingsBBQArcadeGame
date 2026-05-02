@@ -1,6 +1,6 @@
 import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp, keys } from './input';
 import { createGame, tickGame } from './game';
-import { initRenderer, render, resizeRenderer, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay } from './renderer';
+import { initRenderer, render, resizeRenderer, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu } from './renderer';
 import type { GameState, CookSlot } from './types';
 import { LEVELS, STARTING_MONEY, PLAYER_SPEED } from './config';
 import { loadLeaderboard, saveEntry, type LeaderboardEntry } from './leaderboard';
@@ -89,7 +89,7 @@ let isCoop = false;
 type Screen = 'game' | 'name_entry' | 'leaderboard';
 let screen: Screen = 'game';
 let isPaused = false, pauseMenuIdx = 0;
-let pauseSubScreen: 'controls' | null = null;
+let pauseSubScreen: 'controls' | 'restaurant_menu' | null = null;
 let leaderboardReturn: 'menu' | 'pause' = 'menu';
 
 const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ';
@@ -341,7 +341,7 @@ function loop(now: number): void {
   if (!gs) return;
   if (isPaused && gs.phase === 'playing') {
     lastTime = now;
-    if (pauseSubScreen === 'controls') {
+    if (pauseSubScreen === 'controls' || pauseSubScreen === 'restaurant_menu') {
       if (input.interactPressed || input.p2InteractPressed) pauseSubScreen = null;
     } else {
       if (input.menuPickUp   || input.p2MenuPickUp)   pauseMenuIdx = (pauseMenuIdx-1+5)%5;
@@ -349,14 +349,17 @@ function loop(now: number): void {
       if (input.interactPressed || input.p2InteractPressed) {
         switch (pauseMenuIdx) {
           case 0: isPaused = false; pauseSubScreen = null; break;
-          case 1: case 2: isPaused = false; flushFrame(); if (isOnlineGame) cleanupOnlineGame(); showMenu(); return;
+          case 1: isPaused = false; flushFrame(); if (isOnlineGame) cleanupOnlineGame(); showMenu(); return;
+          case 2: pauseSubScreen = 'restaurant_menu'; break;
           case 3: pauseSubScreen = 'controls'; break;
           case 4: leaderboardEntries = loadLeaderboard(); leaderboardReturn = 'pause'; screen = 'leaderboard'; break;
         }
       }
     }
     render(gs);
-    if (pauseSubScreen === 'controls') drawControlsOverlay(); else drawPauseMenu(pauseMenuIdx);
+    if (pauseSubScreen === 'controls') drawControlsOverlay();
+    else if (pauseSubScreen === 'restaurant_menu') drawRestaurantMenu();
+    else drawPauseMenu(pauseMenuIdx);
     flushFrame(); requestAnimationFrame(loop); return;
   }
   tickGame(gs, dt);

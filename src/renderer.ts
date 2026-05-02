@@ -844,7 +844,7 @@ function drawDailyReport(gs: GameState): void {
 
 // ─── Pause overlay ────────────────────────────────────────────────────────────
 
-const PAUSE_OPTS = ['RESUME', 'QUIT', 'MENU', 'CONTROLS', 'LEADERBOARD'];
+const PAUSE_OPTS = ['RESUME', 'MAIN MENU', 'FOOD MENU', 'CONTROLS', 'LEADERBOARD'];
 
 export function drawPauseMenu(selectedIdx: number): void {
   ctx.fillStyle = 'rgba(0,0,0,0.72)';
@@ -947,6 +947,91 @@ export function drawControlsOverlay(): void {
   ctx.fillStyle = '#443';
   ctx.font = '12px monospace';
   ctx.fillText('E or P to close', cx, py + panelH - 16);
+}
+
+// ─── Restaurant menu overlay ──────────────────────────────────────────────────
+
+export function drawRestaurantMenu(): void {
+  ctx.fillStyle = 'rgba(0,0,0,0.82)';
+  ctx.fillRect(0, 0, W, H);
+
+  const panelW = 720, panelH = 400;
+  const px = (W - panelW) / 2, py = (H - panelH) / 2;
+
+  ctx.fillStyle = '#060402';
+  ctx.fillRect(px, py, panelW, panelH);
+  ctx.strokeStyle = '#c8802a'; ctx.lineWidth = 2;
+  ctx.strokeRect(px, py, panelW, panelH);
+  ctx.strokeStyle = '#3a2010'; ctx.lineWidth = 1;
+  ctx.strokeRect(px + 4, py + 4, panelW - 8, panelH - 8);
+
+  ctx.textAlign = 'center'; ctx.fillStyle = '#c8802a';
+  ctx.font = 'bold 20px monospace';
+  ctx.fillText("KING'S BBQ — MENU", px + panelW / 2, py + 34);
+  ctx.strokeStyle = '#3a2010'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(px + 20, py + 48); ctx.lineTo(px + panelW - 20, py + 48); ctx.stroke();
+
+  const cols: Array<{ title: string; icon: string; items: [string, string][] }> = [
+    { title: 'GRILL', icon: '🔥', items: [
+      ['HMB',           '1× Patty (15s)'],
+      ['CHZ BRGR',      'Patty + Cheese'],
+      ['DBL HMB',       '2× Patty'],
+      ['DBL CHZ BRGR',  '2× Cheese Patty'],
+      ['HOT DOG',       '1× Hot Dog (7.5s)'],
+    ]},
+    { title: 'FRYER', icon: '🍟', items: [
+      ['SM FF',   '1× Fries (7.5s)'],
+      ['LG FF',   '2× Fries'],
+      ['SM PUPS', '1× Pups (5s)'],
+      ['LG PUPS', '2× Pups'],
+    ]},
+    { title: 'SMOKER', icon: '💨', items: [
+      ['BBQ SAND',  '1× Pulled Pork'],
+      ['BBQ PLATE', '2× Pork + FF + PUPS'],
+      ['', ''],
+      ['Raw Pork → Smoker', '→ Chop → 4× Pork'],
+    ]},
+  ];
+
+  const colW = (panelW - 48) / 3;
+  for (let c = 0; c < cols.length; c++) {
+    const col = cols[c];
+    const cx2 = px + 24 + c * (colW + 0) + colW / 2;
+    const bx  = px + 20 + c * (colW + 4);
+    const by  = py + 62;
+    const bh  = panelH - 82;
+
+    ctx.fillStyle = 'rgba(255,255,255,0.02)';
+    ctx.fillRect(bx, by, colW, bh);
+    ctx.strokeStyle = '#2a1e10'; ctx.lineWidth = 1;
+    ctx.strokeRect(bx, by, colW, bh);
+
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillStyle = '#c8802a';
+    ctx.fillText(`${col.icon} ${col.title}`, cx2, by + 22);
+    ctx.strokeStyle = '#2a1e10'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(bx + 8, by + 30); ctx.lineTo(bx + colW - 8, by + 30); ctx.stroke();
+
+    let iy = by + 50;
+    for (const [abbr, desc] of col.items) {
+      if (!abbr && !desc) { iy += 8; continue; }
+      const isNote = abbr.includes('→');
+      ctx.font = isNote ? '10px monospace' : '12px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = isNote ? '#554' : '#d4a84a';
+      ctx.fillText(abbr, bx + 10, iy);
+      ctx.font = '11px monospace';
+      ctx.fillStyle = isNote ? '#554' : '#887060';
+      ctx.textAlign = 'right';
+      ctx.fillText(desc, bx + colW - 10, iy);
+      iy += isNote ? 14 : 18;
+    }
+  }
+
+  ctx.textAlign = 'center'; ctx.fillStyle = '#443';
+  ctx.font = '12px monospace';
+  ctx.fillText('E or P to close', px + panelW / 2, py + panelH - 14);
 }
 
 // ─── Name entry (arcade initials) ─────────────────────────────────────────────
