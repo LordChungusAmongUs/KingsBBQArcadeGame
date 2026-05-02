@@ -381,7 +381,7 @@ function tickPlayer2(gs: GameState, dt: number): void {
 }
 
 // Push player circle out of station rectangles (AABB vs circle)
-function resolveCollisions(p: import('./types').Player, stations: import('./types').Station[]): void {
+export function resolveCollisions(p: import('./types').Player, stations: import('./types').Station[]): void {
   const R = p.radius;
   for (const s of stations) {
     // Expand rect by player radius, find closest point on rect to circle center

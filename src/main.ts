@@ -1,5 +1,5 @@
 import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp, keys } from './input';
-import { createGame, tickGame } from './game';
+import { createGame, tickGame, resolveCollisions } from './game';
 import { initRenderer, render, resizeRenderer, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu } from './renderer';
 import type { GameState, CookSlot } from './types';
 import { LEVELS, STARTING_MONEY, PLAYER_SPEED } from './config';
@@ -347,8 +347,12 @@ function guestLoop(now: number): void {
       const spd = PLAYER_SPEED * dt / 1000;
       p2PredX = Math.max(40, Math.min(1060, p2PredX! + dx * spd));
       p2PredY = Math.max(155, Math.min(690, p2PredY! + dy * spd));
+      // Apply same collision resolution as host so P2 stops cleanly at walls/stations
+      const p2tmp = { x: p2PredX, y: p2PredY, radius: 18 } as any;
+      resolveCollisions(p2tmp, remoteGs.stations);
+      p2PredX = p2tmp.x; p2PredY = p2tmp.y;
       displayGs = { ...displayGs, player2: { ...displayGs.player2,
-        x: p2PredX, y: p2PredY, facing: p2PredFacing, walkFrame: p2PredWalk,
+        x: p2PredX!, y: p2PredY!, facing: p2PredFacing, walkFrame: p2PredWalk,
       }};
     }
 
