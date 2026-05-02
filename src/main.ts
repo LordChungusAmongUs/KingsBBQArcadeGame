@@ -644,12 +644,17 @@ function openAchievementsOverlay(): void {
       ? 'ALL TIERS COMPLETE'
       : `${fmt(stat, dollar)} / ${fmt(nextTier, dollar)}`;
 
+    const nextTierIndex = cur + 1;
+    const descSuffix = maxed
+      ? ' (All Tiers Unlocked)'
+      : ` (Tier ${ROMAN[nextTierIndex] ?? nextTierIndex + 1}: ${fmt(nextTier, dollar)})`;
+
     return `<div class="ach-row${cur >= 0 ? ' ach-has' : ''}">
       <div class="ach-row-top">
         <span class="ach-name">${ach.name}</span>
         <div class="ach-tiers">${tiers}</div>
       </div>
-      <div class="ach-desc">${ach.desc}</div>
+      <div class="ach-desc">${ach.desc}${descSuffix}</div>
       <div class="ach-progress">
         <div class="ach-bar"><div class="ach-bar-fill" style="width:${pct}%"></div></div>
         <span class="ach-progress-text">${progressLabel}</span>
