@@ -7,56 +7,66 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #000;
-      overflow: hidden;
-      font-family: 'Courier New', monospace;
-      color: #ccc;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100vw;
-      height: 100vh;
+      background: #000; overflow: hidden;
+      font-family: 'Courier New', monospace; color: #ccc;
+      display: flex; align-items: center; justify-content: center;
+      width: 100vw; height: 100vh;
     }
     #app {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      position: relative; width: 100vw; height: 100vh;
+      display: flex; align-items: center; justify-content: center;
       background: #0a0804;
     }
     #gameCanvas {
-      display: block;
-      max-width: 100%;
-      max-height: 100%;
-      aspect-ratio: 1183 / 680;
-      image-rendering: pixelated;
+      display: block; max-width: 100%; max-height: 100%;
+      aspect-ratio: 1183 / 680; image-rendering: pixelated;
     }
+
+    /* ── Menu ──────────────────────────────────────────────────────── */
     #menu {
       position: absolute; inset: 0; display: flex; flex-direction: column;
       align-items: center; justify-content: flex-start;
       background: linear-gradient(160deg, #1a0c04, #0a0804); z-index: 10;
-      overflow-y: auto; padding: 1.5rem 1rem;
+      overflow-y: auto; padding: 1rem 1rem 2rem;
     }
     #menuTitle { font-size: 3rem; letter-spacing: 0.15em; color: #f84; margin-bottom: 0.2em; text-shadow: 0 0 40px #f842; text-align: center; }
     #menu h2 { font-size: 1rem; letter-spacing: 0.3em; color: #986; margin-bottom: 0.4em; }
-    #menu p  { color: #765; font-size: 0.85rem; max-width: 480px; text-align: center; line-height: 1.8; margin-bottom: 2em; }
-    .menuBtns { display: flex; gap: 1.2rem; flex-wrap: wrap; justify-content: center; }
-    #startBtn, #coopBtn, #fsBtn {
-      padding: 0.9rem 2.8rem; background: transparent;
-      font-family: inherit; font-size: 1.1rem; letter-spacing: 0.3em;
-      cursor: pointer; transition: background 0.2s, color 0.2s;
-      touch-action: manipulation;
+    #menu > p { color: #765; font-size: 0.85rem; max-width: 480px; text-align: center; line-height: 1.8; margin-bottom: 1.5em; }
+    .menuBtns { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; margin-bottom: 0.5rem; }
+    #startBtn, #coopBtn, #lobbyBtn, #fsBtn {
+      padding: 0.9rem 2rem; background: transparent;
+      font-family: inherit; font-size: 1rem; letter-spacing: 0.25em;
+      cursor: pointer; transition: background 0.2s, color 0.2s; touch-action: manipulation;
     }
     #startBtn  { border: 2px solid #f84; color: #f84; }
     #startBtn:hover, #startBtn:focus  { background: #f842; color: #fff; outline: none; }
     #coopBtn   { border: 2px solid #4af; color: #4af; }
     #coopBtn:hover, #coopBtn:focus    { background: #4af3; color: #fff; outline: none; }
-    #fsBtn     { border: 2px solid #585; color: #585; font-size: 0.85rem; padding: 0.9rem 1.6rem; }
+    #lobbyBtn  { border: 2px solid #fa4; color: #fa4; }
+    #lobbyBtn:hover, #lobbyBtn:focus  { background: #fa43; color: #fff; outline: none; }
+    #fsBtn     { border: 2px solid #585; color: #585; font-size: 0.82rem; }
     #fsBtn:hover, #fsBtn:focus        { background: #5853; color: #afa; outline: none; }
-    .controls { margin-top: 1.5rem; color: #554; font-size: 0.78rem; letter-spacing: 0.1em; text-align: center; line-height: 2; }
-    .menu-ref { margin-top: 1.5rem; width: 100%; max-width: 860px; }
+    .controls { margin-top: 1.2rem; color: #554; font-size: 0.75rem; letter-spacing: 0.1em; text-align: center; line-height: 2; }
+
+    /* ── Auth section ──────────────────────────────────────────────── */
+    #authSection { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 1.2rem; }
+    #authOut button {
+      padding: 0.5rem 1.2rem; border: 1px solid #886; color: #aaa; background: transparent;
+      font-family: inherit; font-size: 0.78rem; letter-spacing: 0.2em; cursor: pointer;
+      transition: background 0.2s;
+    }
+    #authOut button:hover { background: #332; }
+    #authIn { display: flex; align-items: center; gap: 0.5rem; }
+    #userPhoto { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #f84; }
+    #userName { color: #f84; font-size: 0.8rem; letter-spacing: 0.1em; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #signOutBtn {
+      padding: 0.3rem 0.8rem; border: 1px solid #554; color: #776; background: transparent;
+      font-family: inherit; font-size: 0.7rem; cursor: pointer;
+    }
+    #signOutBtn:hover { background: #221; color: #f84; }
+
+    /* ── Recipe reference ──────────────────────────────────────────── */
+    .menu-ref { margin-top: 1.2rem; width: 100%; max-width: 860px; }
     .menu-ref h3 { font-size: 0.75rem; letter-spacing: 0.35em; color: #8a6a40; margin-bottom: 0.8rem; text-align: center; }
     .recipe-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
     .recipe-col { background: rgba(255,255,255,0.03); border: 1px solid #2a1e10; padding: 0.7rem 0.9rem; border-radius: 4px; }
@@ -64,145 +74,193 @@
     .recipe-item { font-size: 0.72rem; line-height: 1.9; color: #887060; }
     .recipe-item .abbr { color: #d4a84a; font-weight: bold; }
     .recipe-note { margin-top: 0.7rem; font-size: 0.7rem; color: #665040; text-align: center; letter-spacing: 0.15em; }
-    #hiscores { margin-top: 1.6rem; width: 100%; max-width: 420px; margin-bottom: 1.5rem; }
+
+    /* ── High scores ───────────────────────────────────────────────── */
+    #hiscores { margin-top: 1.2rem; width: 100%; max-width: 480px; margin-bottom: 1.5rem; }
     #hiscores h3 { font-size: 0.72rem; letter-spacing: 0.35em; color: #f84; text-align: center; margin-bottom: 0.6rem; }
-    .hs-row { display: flex; gap: 0.8rem; font-size: 0.75rem; line-height: 2; border-bottom: 1px solid #1a1208; padding: 0 0.4rem; }
+    .hs-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; line-height: 2; border-bottom: 1px solid #1a1208; padding: 0 0.4rem; }
     .hs-rank { color: #554; width: 1.6rem; flex-shrink: 0; }
+    .hs-photo { width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0; }
     .hs-name { color: #f84; font-weight: bold; width: 2.4rem; flex-shrink: 0; letter-spacing: 0.15em; }
     .hs-score { color: #cca; flex: 1; }
     .hs-level { color: #654; }
     .hs-empty { font-size: 0.72rem; color: #443; text-align: center; padding: 0.5rem; }
 
-    /* ── Touch controls ──────────────────────────────────────────────── */
+    /* ── Lobby screen ──────────────────────────────────────────────── */
+    #lobbyScreen {
+      display: none; position: fixed; inset: 0; z-index: 20;
+      flex-direction: column;
+      background: linear-gradient(160deg, #1a0c04, #080604);
+      font-family: 'Courier New', monospace;
+    }
+    #lobbyHeader {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.8rem 1.4rem; border-bottom: 1px solid #2a1e10;
+      background: rgba(0,0,0,0.4);
+    }
+    #lobbyTitle { color: #f84; font-size: 1.1rem; letter-spacing: 0.25em; }
+    #lobbyBack {
+      padding: 0.4rem 1rem; border: 1px solid #554; color: #998; background: transparent;
+      font-family: inherit; font-size: 0.8rem; cursor: pointer; letter-spacing: 0.15em;
+    }
+    #lobbyBack:hover { background: #221; color: #f84; }
+    #lobbyContent {
+      display: flex; flex: 1; overflow: hidden;
+    }
+    #lobbyLeft {
+      width: 320px; min-width: 240px; flex-shrink: 0;
+      border-right: 1px solid #2a1e10;
+      display: flex; flex-direction: column;
+    }
+    #lobbyRight {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .pane-title {
+      padding: 0.7rem 1rem; font-size: 0.7rem; letter-spacing: 0.35em;
+      color: #8a6a40; border-bottom: 1px solid #1a1208;
+    }
+    #lobbyListPane, #myLobbyPane {
+      display: flex; flex-direction: column; flex: 1; overflow: hidden;
+    }
+    #createLobbyBtn {
+      margin: 0.8rem 1rem; padding: 0.6rem; border: 1px solid #f84; color: #f84;
+      background: transparent; font-family: inherit; font-size: 0.8rem;
+      letter-spacing: 0.2em; cursor: pointer;
+    }
+    #createLobbyBtn:hover { background: #f841; }
+    #lobbyList {
+      flex: 1; overflow-y: auto; padding: 0.4rem 0.5rem;
+    }
+    .lobby-empty { color: #443; font-size: 0.75rem; text-align: center; padding: 1rem; }
+    .lobby-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.5rem 0.6rem; border-bottom: 1px solid #1a1208; font-size: 0.8rem;
+    }
+    .lobby-photo { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; }
+    .lobby-host-name { flex: 1; color: #cc9; }
+    .lobby-guests { color: #665; font-size: 0.72rem; }
+    .lobby-full .lobby-host-name { color: #554; }
+    .lobby-join-btn {
+      padding: 0.2rem 0.6rem; border: 1px solid #4af; color: #4af; background: transparent;
+      font-family: inherit; font-size: 0.72rem; cursor: pointer; letter-spacing: 0.1em;
+    }
+    .lobby-join-btn:hover { background: #4af2; }
+    .lobby-badge { color: #f84; font-size: 0.7rem; }
+    #lobbyPlayersList { padding: 0.8rem 1rem; flex: 1; }
+    .lobby-player-row {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.5rem 0; color: #cc9; font-size: 0.85rem;
+      border-bottom: 1px solid #1a1208;
+    }
+    .waiting-text { color: #443; font-size: 0.75rem; font-style: italic; }
+    #lobbyButtons { padding: 0.8rem 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    #startOnlineBtn {
+      padding: 0.7rem; border: 2px solid #f84; color: #f84; background: transparent;
+      font-family: inherit; font-size: 0.9rem; letter-spacing: 0.2em; cursor: pointer;
+    }
+    #startOnlineBtn:hover { background: #f842; color: #fff; }
+    #leaveLobbyBtn {
+      padding: 0.5rem; border: 1px solid #554; color: #776; background: transparent;
+      font-family: inherit; font-size: 0.8rem; letter-spacing: 0.15em; cursor: pointer;
+    }
+    #leaveLobbyBtn:hover { background: #221; color: #f84; }
+    #chatMessages {
+      flex: 1; overflow-y: auto; padding: 0.6rem 1rem;
+      display: flex; flex-direction: column; gap: 0.3rem;
+    }
+    .chat-empty { color: #443; font-size: 0.75rem; text-align: center; padding: 1rem; }
+    .chat-msg { font-size: 0.8rem; line-height: 1.5; }
+    .chat-name { color: #f84; margin-right: 0.3rem; }
+    .chat-text { color: #998; }
+    .chat-mine .chat-name { color: #4af; }
+    #chatInputRow {
+      display: flex; gap: 0.5rem; padding: 0.6rem 1rem;
+      border-top: 1px solid #1a1208;
+    }
+    #chatText {
+      flex: 1; background: #0f0a04; border: 1px solid #2a1e10; color: #ccc;
+      font-family: inherit; font-size: 0.82rem; padding: 0.4rem 0.6rem;
+      outline: none;
+    }
+    #chatText:focus { border-color: #554; }
+    #chatSend {
+      padding: 0.4rem 0.8rem; border: 1px solid #f84; color: #f84; background: transparent;
+      font-family: inherit; font-size: 0.8rem; cursor: pointer;
+    }
+    #chatSend:hover { background: #f841; }
+    #lobbyAuthRequired {
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      flex: 1; gap: 1rem;
+    }
+    #lobbyAuthRequired p { color: #776; font-size: 0.9rem; letter-spacing: 0.1em; }
+    #lobbySignIn {
+      padding: 0.7rem 1.8rem; border: 2px solid #f84; color: #f84; background: transparent;
+      font-family: inherit; font-size: 0.9rem; letter-spacing: 0.2em; cursor: pointer;
+    }
+    #lobbySignIn:hover { background: #f842; color: #fff; }
+
+    /* ── Touch controls ─────────────────────────────────────────────── */
     #touchControls {
-      display: none;
-      position: fixed;
-      bottom: 0; left: 0; right: 0;
-      height: 180px;
-      pointer-events: none;
-      z-index: 20;
-      padding: 12px 16px;
-      justify-content: space-between;
-      align-items: flex-end;
+      display: none; position: fixed; bottom: 0; left: 0; right: 0;
+      height: 180px; pointer-events: none; z-index: 30;
+      padding: 12px 16px; justify-content: space-between; align-items: flex-end;
     }
-    #touchControls.touch-visible.game-active {
-      display: flex;
-    }
+    #touchControls.touch-visible.game-active { display: flex; }
     .dpad {
       display: grid;
-      grid-template-areas:
-        ". up ."
-        "left . right"
-        ". down .";
+      grid-template-areas: ". up ." "left . right" ". down .";
       grid-template-columns: 64px 64px 64px;
       grid-template-rows: 64px 64px 64px;
-      gap: 4px;
-      pointer-events: all;
+      gap: 4px; pointer-events: all;
     }
     .dpad-btn {
-      background: rgba(255,200,100,0.15);
-      border: 2px solid rgba(255,200,100,0.35);
-      border-radius: 10px;
-      color: #f84;
-      font-size: 1.4rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      user-select: none;
-      -webkit-user-select: none;
-      touch-action: none;
+      background: rgba(255,200,100,0.15); border: 2px solid rgba(255,200,100,0.35);
+      border-radius: 10px; color: #f84; font-size: 1.4rem;
+      display: flex; align-items: center; justify-content: center;
+      user-select: none; -webkit-user-select: none; touch-action: none;
     }
     .dpad-btn:active { background: rgba(255,200,100,0.35); }
-    #dUp    { grid-area: up; }
-    #dLeft  { grid-area: left; }
-    #dRight { grid-area: right; }
-    #dDown  { grid-area: down; }
-    .touch-right {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 10px;
-      pointer-events: all;
-    }
+    #dUp { grid-area: up; } #dLeft { grid-area: left; }
+    #dRight { grid-area: right; } #dDown { grid-area: down; }
+    .touch-right { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; pointer-events: all; }
     #dInteract {
-      width: 90px; height: 90px;
-      background: rgba(255,100,50,0.2);
-      border: 2px solid rgba(255,100,50,0.5);
-      border-radius: 50%;
-      color: #f84;
-      font-family: 'Courier New', monospace;
-      font-size: 1.4rem;
-      font-weight: bold;
-      letter-spacing: 0.1em;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      user-select: none;
-      -webkit-user-select: none;
-      touch-action: none;
+      width: 90px; height: 90px; background: rgba(255,100,50,0.2);
+      border: 2px solid rgba(255,100,50,0.5); border-radius: 50%; color: #f84;
+      font-family: 'Courier New', monospace; font-size: 1.4rem; font-weight: bold;
+      display: flex; align-items: center; justify-content: center;
+      user-select: none; -webkit-user-select: none; touch-action: none;
     }
     #dInteract:active { background: rgba(255,100,50,0.45); }
     #dPause {
-      width: 56px; height: 36px;
-      background: rgba(100,100,100,0.2);
-      border: 1px solid rgba(150,150,150,0.3);
-      border-radius: 8px;
-      color: #888;
-      font-size: 1rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      user-select: none;
-      -webkit-user-select: none;
-      touch-action: none;
+      width: 56px; height: 36px; background: rgba(100,100,100,0.2);
+      border: 1px solid rgba(150,150,150,0.3); border-radius: 8px; color: #888;
+      font-size: 1rem; display: flex; align-items: center; justify-content: center;
+      user-select: none; -webkit-user-select: none; touch-action: none;
     }
     #dPause:active { background: rgba(100,100,100,0.4); }
 
     /* ── Rotate overlay ─────────────────────────────────────────────── */
     #rotateOverlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: #0a0804;
-      z-index: 100;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 1.2rem;
+      display: none; position: fixed; inset: 0; background: #0a0804; z-index: 100;
+      flex-direction: column; align-items: center; justify-content: center; gap: 1.2rem;
     }
-    #rotateOverlay .rotate-icon {
-      font-size: 4rem;
-      animation: spin90 1.2s ease-in-out infinite alternate;
-    }
-    @keyframes spin90 {
-      from { transform: rotate(0deg); }
-      to   { transform: rotate(90deg); }
-    }
-    #rotateOverlay p {
-      color: #f84;
-      font-size: 1rem;
-      letter-spacing: 0.2em;
-      text-align: center;
-    }
-    @media (orientation: portrait) and (hover: none) {
-      #rotateOverlay { display: flex; }
-    }
+    #rotateOverlay .rotate-icon { font-size: 4rem; animation: spin90 1.2s ease-in-out infinite alternate; }
+    @keyframes spin90 { from { transform: rotate(0deg); } to { transform: rotate(90deg); } }
+    #rotateOverlay p { color: #f84; font-size: 1rem; letter-spacing: 0.2em; text-align: center; }
+    @media (orientation: portrait) and (hover: none) { #rotateOverlay { display: flex; } }
 
     /* ── Mobile menu tweaks ─────────────────────────────────────────── */
     @media (max-width: 600px) {
       #menuTitle { font-size: 2rem; }
-      #menu p { font-size: 0.8rem; margin-bottom: 1.2em; }
-      .menuBtns { flex-direction: column; align-items: stretch; gap: 0.7rem; }
-      #startBtn, #coopBtn, #fsBtn { padding: 1rem; font-size: 1rem; }
+      #menu > p { font-size: 0.8rem; margin-bottom: 1em; }
+      .menuBtns { flex-direction: column; align-items: stretch; gap: 0.6rem; }
+      #startBtn, #coopBtn, #lobbyBtn, #fsBtn { padding: 1rem; }
       .recipe-grid { grid-template-columns: 1fr; }
-      .controls { font-size: 0.7rem; }
+      #lobbyLeft { width: 200px; min-width: 160px; }
     }
     @media (max-height: 500px) and (orientation: landscape) {
       #menuTitle { font-size: 1.6rem; margin-bottom: 0.1em; }
-      #menu p { display: none; }
+      #menu > p { display: none; }
       .menu-ref { display: none; }
     }
   </style>
@@ -210,27 +268,44 @@
 <body>
   <div id="app">
     <canvas id="gameCanvas"></canvas>
+
+    <!-- ── Main menu ───────────────────────────────────────────────── -->
     <div id="menu">
       <div id="menuTitle">👑 KINGS BBQ BONANZA</div>
       <h2>BBQ RESTAURANT SIMULATOR</h2>
       <p>Run a fast-food BBQ kitchen. Take orders, fire up the grill, deep fryer, and smoker — prep plates and get them out the window before the customers rage-quit.</p>
+
+      <!-- Auth -->
+      <div id="authSection">
+        <div id="authOut">
+          <button id="signInBtn">SIGN IN WITH GOOGLE</button>
+        </div>
+        <div id="authIn" style="display:none">
+          <img id="userPhoto" src="" />
+          <span id="userName"></span>
+          <button id="signOutBtn">SIGN OUT</button>
+        </div>
+      </div>
+
       <div class="menuBtns">
         <button id="startBtn">1 PLAYER</button>
         <button id="coopBtn">2 PLAYERS</button>
+        <button id="lobbyBtn">🌐 LOBBY</button>
         <button id="fsBtn">⛶ FULLSCREEN</button>
       </div>
       <div class="controls">
         P1: WASD — move &nbsp;|&nbsp; E — interact<br>
         P2: ARROW KEYS — move &nbsp;|&nbsp; SPACE — interact<br>
-        R — restart &nbsp;|&nbsp; P — pause &nbsp;|&nbsp; F — fullscreen
+        R — menu &nbsp;|&nbsp; P — pause &nbsp;|&nbsp; F — fullscreen
       </div>
+
       <div class="menu-ref">
         <h3>MENU &amp; INGREDIENTS</h3>
         <div class="recipe-grid">
           <div class="recipe-col">
             <div class="recipe-col-header">🔥 GRILL</div>
             <div class="recipe-item"><span class="abbr">HMB</span> — 1× Patty (15s)</div>
-            <div class="recipe-item"><span class="abbr">CHZ BRGR</span> — Patty + Cheese (15s grill, apply cheese, re-melt)</div>
+            <div class="recipe-item"><span class="abbr">CHZ BRGR</span> — Patty + Cheese</div>
             <div class="recipe-item"><span class="abbr">DBL HMB</span> — 2× Patty</div>
             <div class="recipe-item"><span class="abbr">DBL CHZ BRGR</span> — 2× Cheese Patty</div>
             <div class="recipe-item"><span class="abbr">HOT DOG</span> — 1× Hot Dog (7.5s)</div>
@@ -241,25 +316,61 @@
             <div class="recipe-item"><span class="abbr">LG FF</span> — 2× Fries</div>
             <div class="recipe-item"><span class="abbr">SM PUPS</span> — 1× Pups (5s)</div>
             <div class="recipe-item"><span class="abbr">LG PUPS</span> — 2× Pups</div>
-            <div class="recipe-item" style="color:#443;margin-top:0.5rem">COMBO = sandwich + side ordered together</div>
           </div>
           <div class="recipe-col">
             <div class="recipe-col-header">💨 SMOKER</div>
             <div class="recipe-item"><span class="abbr">BBQ SAND</span> — 1× Pulled Pork</div>
-            <div class="recipe-item"><span class="abbr">BBQ PLATE</span> — 2× Pulled Pork + SM FF + SM PUPS</div>
-            <div class="recipe-item" style="color:#443;margin-top:0.4rem">Raw Pork → Smoker (next level carry-over)</div>
-            <div class="recipe-item" style="color:#443">Whole Pork → Chop Table → 4× Pulled Pork</div>
+            <div class="recipe-item"><span class="abbr">BBQ PLATE</span> — 2× Pork + FF + PUPS</div>
+            <div class="recipe-item" style="color:#443;margin-top:0.4rem">Raw Pork → Smoker → Chop → 4× Pork</div>
           </div>
         </div>
-        <div class="recipe-note">Tickets show abbreviated names — memorize recipes here before service</div>
+        <div class="recipe-note">Tickets show abbreviated names — memorize before service</div>
       </div>
+
       <div id="hiscores">
         <h3>— HIGH SCORES —</h3>
-        <div id="hiscores-list"><div class="hs-empty">no scores yet — get cooking!</div></div>
+        <div id="hiscores-list"><div class="hs-empty">loading...</div></div>
       </div>
     </div>
 
-    <!-- Touch controls (shown only on touch devices during gameplay) -->
+    <!-- ── Lobby screen ─────────────────────────────────────────────── -->
+    <div id="lobbyScreen">
+      <div id="lobbyHeader">
+        <span id="lobbyTitle">👑 KINGS BBQ — LOBBY</span>
+        <button id="lobbyBack">← BACK</button>
+      </div>
+      <div id="lobbyContent">
+        <div id="lobbyLeft">
+          <div id="lobbyListPane">
+            <div class="pane-title">OPEN LOBBIES</div>
+            <button id="createLobbyBtn">+ CREATE LOBBY</button>
+            <div id="lobbyList"><div class="lobby-empty">loading...</div></div>
+          </div>
+          <div id="myLobbyPane" style="display:none">
+            <div class="pane-title">YOUR LOBBY</div>
+            <div id="lobbyPlayersList"></div>
+            <div id="lobbyButtons">
+              <button id="startOnlineBtn" style="display:none">▶ START GAME</button>
+              <button id="leaveLobbyBtn">LEAVE LOBBY</button>
+            </div>
+          </div>
+        </div>
+        <div id="lobbyRight">
+          <div class="pane-title">CHAT</div>
+          <div id="chatMessages"><div class="chat-empty">join a lobby to chat</div></div>
+          <div id="chatInputRow">
+            <input id="chatText" placeholder="say something..." maxlength="80" />
+            <button id="chatSend">SEND</button>
+          </div>
+        </div>
+      </div>
+      <div id="lobbyAuthRequired">
+        <p>SIGN IN TO USE THE LOBBY</p>
+        <button id="lobbySignIn">SIGN IN WITH GOOGLE</button>
+      </div>
+    </div>
+
+    <!-- ── Touch controls ───────────────────────────────────────────── -->
     <div id="touchControls">
       <div class="dpad">
         <button class="dpad-btn" id="dUp">▲</button>
@@ -272,15 +383,15 @@
         <button id="dInteract">ACT</button>
       </div>
     </div>
-  </div>
-  <!-- Portrait rotation blocker -->
-  <div id="rotateOverlay">
-    <div class="rotate-icon">📱</div>
-    <p>ROTATE TO LANDSCAPE<br>TO PLAY</p>
+
+    <!-- ── Portrait rotation blocker ────────────────────────────────── -->
+    <div id="rotateOverlay">
+      <div class="rotate-icon">📱</div>
+      <p>ROTATE TO LANDSCAPE<br>TO PLAY</p>
+    </div>
   </div>
 
   <script>
-    // Try to lock orientation to landscape on supported browsers
     if (screen.orientation && screen.orientation.lock) {
       screen.orientation.lock('landscape').catch(() => {});
     }
