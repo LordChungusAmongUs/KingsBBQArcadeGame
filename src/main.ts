@@ -417,11 +417,8 @@ function renderGlobalChat(msgs: GlobalChatMsg[]): void {
   }
   box.innerHTML = msgs.map(m =>
     `<div class="chat-msg ${m.uid === user?.uid ? 'chat-mine' : ''}">
-      ${m.photo ? `<img class="chat-photo" src="${m.photo}" />` : ''}
-      <div class="chat-bubble">
-        <span class="chat-name">${escHtml(m.name)}</span>
-        <span class="chat-text">${escHtml(m.text)}</span>
-      </div>
+      <span class="chat-name">${escHtml(m.name)}</span>
+      <span class="chat-text">${escHtml(m.text)}</span>
     </div>`
   ).join('');
   box.scrollTop = box.scrollHeight;
