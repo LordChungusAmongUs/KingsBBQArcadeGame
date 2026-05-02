@@ -171,6 +171,9 @@ let unsubHostLobby: (() => void) | null = null;
 let p2PredX: number | null = null;
 let p2PredY: number | null = null;
 let p2PredFacing = 0, p2PredWalk = 0;
+// Last authoritative P2 position received from host (used only when standing still)
+let p2AuthX: number | null = null;
+let p2AuthY: number | null = null;
 // Guest-side P1 interpolation (smooth P1 between snapshots)
 type P1Sample = { x: number; y: number; facing: number; walkFrame: number; t: number };
 let p1Prev: P1Sample | null = null;
@@ -409,7 +412,7 @@ function cleanupOnlineGame(): void {
   }
   isOnlineGame = false; isOnlineHost = false; activeLobbyId = null;
   remoteGs = null; lastSentInput = null;
-  p2PredX = null; p2PredY = null;
+  p2PredX = null; p2PredY = null; p2AuthX = null; p2AuthY = null;
   p1Prev = null; p1Curr = null;
   _prevP2 = { up: false, down: false, left: false, right: false, interactSeq: 0 };
   touchControls.classList.remove('game-active');
@@ -425,7 +428,7 @@ function startOnlineGame(lobbyId: string, asHost: boolean): void {
   } else {
     incrementStat('coop_sessions', 1);
     guestInteractSeq = 0; lastSentInput = null;
-    p2PredX = null; p2PredY = null;
+    p2PredX = null; p2PredY = null; p2AuthX = null; p2AuthY = null;
     menu.style.display = 'none';
     touchControls.classList.add('game-active');
     remoteGs = null;
@@ -433,18 +436,13 @@ function startOnlineGame(lobbyId: string, asHost: boolean): void {
       remoteGs = gs;
       if (gs.player2) {
         if (p2PredX === null) {
-          // First snapshot: initialise prediction
+          // First snapshot: initialise prediction from authoritative position
           p2PredX = gs.player2.x; p2PredY = gs.player2.y;
           p2PredFacing = gs.player2.facing; p2PredWalk = gs.player2.walkFrame;
-        } else {
-          const drift = Math.hypot(p2PredX - gs.player2.x, p2PredY! - gs.player2.y);
-          if (drift > 80) {
-            // Very large drift (interact teleport) — snap immediately
-            p2PredX = gs.player2.x; p2PredY = gs.player2.y;
-            p2PredFacing = gs.player2.facing; p2PredWalk = gs.player2.walkFrame;
-          }
-          // Small drift: gradual per-frame correction applied in guestLoop, not here
         }
+        // Always track the auth reference — correction applied in guestLoop only
+        // when P2 is standing still, so movement is never pulled backward.
+        p2AuthX = gs.player2.x; p2AuthY = gs.player2.y;
       }
       // Feed P1 interpolation: lerp from previous sample toward this one
       p1Prev = p1Curr ?? { x: gs.player.x, y: gs.player.y, facing: gs.player.facing, walkFrame: gs.player.walkFrame, t: Date.now() };
@@ -517,15 +515,16 @@ function guestLoop(now: number): void {
         resolveCollisions(p2tmp, remoteGs.stations);
         p2PredX = p2tmp.x; p2PredY = p2tmp.y;
       }
-      // Reconcile only while standing still — correcting during movement creates drag/glide.
-      // Large teleport drifts (interactions) are caught by the 80px snap in the snapshot cb.
+      // Only reconcile while standing still so movement is never pulled backward.
       const isMoving = inp.up || inp.down || inp.left || inp.right;
-      if (!isMoving && remoteGs.player2) {
-        const authX = remoteGs.player2.x, authY = remoteGs.player2.y;
-        const err = Math.hypot(p2PredX! - authX, p2PredY! - authY);
-        if (err > 4) {
-          p2PredX = p2PredX! + (authX - p2PredX!) * 0.2;
-          p2PredY = p2PredY! + (authY - p2PredY!) * 0.2;
+      if (!isMoving && p2AuthX !== null) {
+        const err = Math.hypot(p2PredX! - p2AuthX, p2PredY! - p2AuthY!);
+        if (err > 60) {
+          // Large error while stopped (interaction moved P2) — snap immediately
+          p2PredX = p2AuthX; p2PredY = p2AuthY!;
+        } else if (err > 3) {
+          p2PredX = p2PredX! + (p2AuthX - p2PredX!) * 0.25;
+          p2PredY = p2PredY! + (p2AuthY! - p2PredY!) * 0.25;
         }
       }
       displayGs = { ...displayGs, player2: { ...displayGs.player2,
