@@ -1,0 +1,59 @@
+export const keys: Set<string> = new Set();
+export const input = {
+  interactPressed: false,
+  interactHeld: false,
+  restartPressed: false,
+  menuPickUp:    false,
+  menuPickLeft:  false,
+  menuPickRight: false,
+  menuPickDown:  false,
+  // Player 2 (P=up, L=left, ;=down, '=right, [=interact)
+  p2InteractPressed: false,
+  p2MenuPickUp:    false,
+  p2MenuPickLeft:  false,
+  p2MenuPickRight: false,
+  p2MenuPickDown:  false,
+};
+
+let _interactDown = false;
+
+export function initInput(): void {
+  window.addEventListener('keydown', e => {
+    if (e.repeat) return;
+    keys.add(e.code);
+    if (e.code === 'KeyE') {
+      _interactDown = true;
+      input.interactPressed = true;
+    }
+    if (e.code === 'KeyR') input.restartPressed = true;
+    if (e.code === 'KeyW' || e.code === 'ArrowUp')    input.menuPickUp    = true;
+    if (e.code === 'KeyA' || e.code === 'ArrowLeft')  input.menuPickLeft  = true;
+    if (e.code === 'KeyD' || e.code === 'ArrowRight') input.menuPickRight = true;
+    if (e.code === 'KeyS' || e.code === 'ArrowDown')  input.menuPickDown  = true;
+    // P2
+    if (e.code === 'Space') input.p2InteractPressed = true;
+    if (e.code === 'ArrowUp')    input.p2MenuPickUp    = true;
+    if (e.code === 'ArrowLeft')  input.p2MenuPickLeft  = true;
+    if (e.code === 'ArrowRight') input.p2MenuPickRight = true;
+    if (e.code === 'ArrowDown')  input.p2MenuPickDown  = true;
+  });
+  window.addEventListener('keyup', e => {
+    keys.delete(e.code);
+    if (e.code === 'KeyE') _interactDown = false;
+  });
+}
+
+export function flushFrame(): void {
+  input.interactPressed = false;
+  input.restartPressed  = false;
+  input.menuPickUp      = false;
+  input.menuPickLeft    = false;
+  input.menuPickRight   = false;
+  input.menuPickDown    = false;
+  input.interactHeld    = _interactDown;
+  input.p2InteractPressed = false;
+  input.p2MenuPickUp    = false;
+  input.p2MenuPickLeft  = false;
+  input.p2MenuPickRight = false;
+  input.p2MenuPickDown  = false;
+}

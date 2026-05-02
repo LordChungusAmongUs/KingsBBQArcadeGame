@@ -1,0 +1,613 @@
+import type { GameState, Order, FoodId, HeldItem, StagedItem, CookSlot } from './types';
+import { LEVELS, ORDERS, FOOD, MEAL_PRICES, INTERACT_RANGE, PLAYER_SPEED, PARTIAL_SPOIL_TIME, STAGED_SPOIL_TIME, LABOR_RATE, OVERTIME_LABOR_RATE, OVERHEAD_COST, BASE_MAX_FAILS, UPSET_THRESHOLDS, ORDER_DEFS } from './config';
+import { buildStations, tickCooking, nearestStation, distToStation, placeOnStation, pickupFromStation } from './kitchen';
+import { input, keys } from './input';
+
+const MAX_STACK = 2;
+let _orderId = 1;
+
+export function createGame(level: number, carryScore = 0, coop = false, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0): GameState {
+  const lvl = LEVELS[level - 1];
+  const game: GameState = {
+    player:  { x: 540, y: 430, vx: 0, vy: 0, held: null, radius: 18, facing: 0, walkFrame: 0 },
+    player2: coop ? { x: 630, y: 430, vx: 0, vy: 0, held: null, radius: 18, facing: Math.PI, walkFrame: 0 } : null,
+    coop,
+    stations: buildStations(),
+    orders: [],
+    plates: [],
+    staged: [],
+    score: carryScore,
+    level,
+    levelTimer: lvl.duration,
+    nextOrderIn: 3000,
+    completed: 0,
+    failed: carryFailed,
+    phase: 'playing',
+    levelEndTimer: 0,
+    prepTimer: 15000,
+    laborAccum: 0,
+    chopStored: 0,
+    chopProgress: 0,
+    chopOutput: 0,
+    activeMenu: null,
+    maxFails: BASE_MAX_FAILS + thresholdsUnlocked,
+    thresholdsUnlocked,
+    levelSales: 0,
+    levelCOGS: 0,
+    levelLabor: 0,
+    levelWaste: 0,
+    salesByItem: {},
+  };
+  if (smokerSlots) {
+    const smoker = game.stations.find(s => s.kind === 'smoker');
+    if (smoker) smoker.slots = smokerSlots.map(sl => ({ ...sl }));
+  }
+  return game;
+}
+
+export function tickGame(gs: GameState, dt: number): void {
+  if (gs.phase !== 'playing') {
+    gs.levelEndTimer -= dt;
+    tickCooking(gs.stations, dt);
+    return;
+  }
+
+  if (gs.prepTimer > 0) {
+    gs.prepTimer = Math.max(0, gs.prepTimer - dt);
+    drainLabor(gs, dt, LABOR_RATE);
+    tickCooking(gs.stations, dt);
+    tickSmoker(gs);
+    tickChop(gs, dt);
+    tickStaged(gs, dt);
+    tickMenu(gs);
+    tickPlayer(gs, dt);
+    if (gs.coop && gs.player2) tickPlayer2(gs, dt);
+    if (input.interactPressed)   doInteract(gs, 1);
+    if (input.p2InteractPressed) doInteract(gs, 2);
+    return;
+  }
+
+  gs.levelTimer -= dt;
+  const isOvertime = gs.levelTimer <= 0;
+  drainLabor(gs, dt, isOvertime ? OVERTIME_LABOR_RATE : LABOR_RATE);
+  if (isOvertime) {
+    gs.levelTimer = 0;
+
+    // When no orders remain, instantly spoil all leftover food
+    const noOrders = !gs.orders.some(o => o.status === 'active' || o.status === 'plating');
+    if (noOrders) {
+      for (const st of gs.stations) {
+        if (st.kind !== 'grill' && st.kind !== 'fryer') continue;
+        for (const slot of st.slots) {
+          if (slot.state === 'cooking' || slot.state === 'ready') slot.state = 'burned';
+        }
+      }
+      for (const si of gs.staged) si.spoiled = true;
+      gs.chopStored = 0; gs.chopProgress = 0; gs.chopOutput = 0;
+    }
+
+    const hasBadFood = gs.staged.some(si => si.spoiled) ||
+      gs.stations.some(st => st.slots.some(sl => sl.state === 'burned'));
+    const stillWaiting = !noOrders || hasBadFood;
+    if (!stillWaiting) {
+      if (gs.failed >= gs.maxFails) {
+        gs.phase = 'game_over';
+        gs.levelEndTimer = 4000;
+      } else {
+        gs.score -= OVERHEAD_COST;
+        gs.phase = 'level_end';
+        gs.levelEndTimer = 20000;
+      }
+      return;
+    }
+  }
+
+  tickOrders(gs, dt);
+  tickStaged(gs, dt);
+  tickCooking(gs.stations, dt);
+  tickSmoker(gs);
+  tickChop(gs, dt);
+  tickMenu(gs);
+  tickPlayer(gs, dt);
+  if (gs.coop && gs.player2) tickPlayer2(gs, dt);
+  if (input.interactPressed)   doInteract(gs, 1);
+  if (input.p2InteractPressed) doInteract(gs, 2);
+}
+
+// ─── Labor & thresholds ───────────────────────────────────────────────────────
+
+function drainLabor(gs: GameState, dt: number, rate: number): void {
+  gs.laborAccum += dt;
+  while (gs.laborAccum >= 1000) {
+    gs.laborAccum -= 1000;
+    gs.score -= rate;
+    gs.levelLabor += rate;
+  }
+}
+
+function checkThresholds(gs: GameState): void {
+  const newCount = UPSET_THRESHOLDS.filter(t => gs.score >= t).length;
+  if (newCount > gs.thresholdsUnlocked) {
+    gs.thresholdsUnlocked = newCount;
+    gs.maxFails = BASE_MAX_FAILS + gs.thresholdsUnlocked;
+  }
+}
+
+function getIngredientCost(foodId: FoodId): number {
+  const def = FOOD.get(foodId);
+  if (!def) return 0;
+  if (def.cost !== undefined) return def.cost;
+  if (def.cookedFrom) return getIngredientCost(def.cookedFrom);
+  return 0;
+}
+
+// ─── Orders ───────────────────────────────────────────────────────────────────
+
+function tickOrders(gs: GameState, dt: number): void {
+  const lvl = LEVELS[gs.level - 1];
+  gs.nextOrderIn -= dt;
+  if (gs.nextOrderIn <= 0 && gs.levelTimer > 0) {
+    spawnOrder(gs);
+    gs.nextOrderIn = lvl.orderIntervalMin + Math.random() * (lvl.orderIntervalMax - lvl.orderIntervalMin);
+  }
+  for (const o of gs.orders) {
+    if (o.status !== 'active') continue;
+    o.elapsed += dt;
+    if (o.elapsed >= o.timeLimit) {
+      o.status = 'failed';
+      gs.failed++;
+      if (gs.failed >= gs.maxFails) { gs.phase = 'game_over'; gs.levelEndTimer = 4000; }
+    }
+  }
+
+  // Partial plate spoil: if some items placed but not all, count down
+  for (const o of gs.orders) {
+    if (o.status !== 'active') continue;
+    const anyDone = o.items.some(i => i.done);
+    const allDone = o.items.every(i => i.done);
+    if (anyDone && !allDone) {
+      o.spoilTimer += dt;
+      if (o.spoilTimer >= PARTIAL_SPOIL_TIME) {
+        for (const item of o.items) {
+          if (item.done) {
+            gs.staged.push({ food: item.food, spoilTimer: 0, spoiled: true, count: 1 });
+            item.done = false;
+          }
+        }
+        o.spoilTimer = 0;
+      }
+    } else {
+      o.spoilTimer = 0;
+    }
+  }
+}
+
+// Maps arrow direction to slot index based on menu size
+function menuKeySlot(menuLen: number, dir: 'up'|'left'|'right'|'down'): number {
+  if (menuLen === 1) return dir === 'up' ? 0 : -1;
+  if (menuLen === 2) { return dir === 'left' ? 0 : dir === 'right' ? 1 : -1; }
+  if (menuLen === 3) { return dir === 'up' ? 0 : dir === 'left' ? 1 : dir === 'right' ? 2 : -1; }
+  return dir === 'up' ? 0 : dir === 'left' ? 1 : dir === 'right' ? 2 : dir === 'down' ? 3 : -1;
+}
+
+function tickMenu(gs: GameState): void {
+  if (!gs.activeMenu) return;
+
+  const st = gs.stations.find(s => s.id === gs.activeMenu!.stationId);
+  const owner = gs.activeMenu.owner;
+  const ownerP = owner === 2 && gs.player2 ? gs.player2 : gs.player;
+
+  if (!st || distToStation(ownerP.x, ownerP.y, st) > INTERACT_RANGE * 2.5) {
+    gs.activeMenu = null;
+    return;
+  }
+
+  const menu = st.menu ?? [];
+  const dirs: Array<['up'|'left'|'right'|'down', boolean]> = owner === 2 ? [
+    ['up',    input.p2MenuPickUp],
+    ['left',  input.p2MenuPickLeft],
+    ['right', input.p2MenuPickRight],
+    ['down',  input.p2MenuPickDown],
+  ] : [
+    ['up',    input.menuPickUp],
+    ['left',  input.menuPickLeft],
+    ['right', input.menuPickRight],
+    ['down',  input.menuPickDown],
+  ];
+  const p = ownerP;
+  for (const [dir, pressed] of dirs) {
+    if (!pressed) continue;
+    const idx = menuKeySlot(menu.length, dir);
+    if (idx < 0 || idx >= menu.length) continue;
+    const food = menu[idx];
+    const cost = FOOD.get(food)?.cost ?? 0;
+    if (p.held === null) {
+      p.held = { food, count: 1, burned: false };
+    } else if (p.held.food === food && !p.held.burned && p.held.count < MAX_STACK) {
+      p.held.count++;
+    } else {
+      p.held = { food, count: 1, burned: false };
+    }
+    break;
+  }
+}
+
+function tickStaged(gs: GameState, dt: number): void {
+  // Tick spoil timers; mark as spoiled (do NOT remove — player must trash them)
+  for (const si of gs.staged) {
+    if (si.spoiled) continue;
+    si.spoilTimer += dt;
+    if (si.spoilTimer >= STAGED_SPOIL_TIME) si.spoiled = true;
+  }
+
+  // Tick completed plate spoil timers; remove if expired
+  for (let i = gs.plates.length - 1; i >= 0; i--) {
+    gs.plates[i].spoilTimer += dt;
+    if (gs.plates[i].spoilTimer >= STAGED_SPOIL_TIME) {
+      gs.plates.splice(i, 1);
+    }
+  }
+
+
+  // Auto-apply non-spoiled staged items to active orders
+  for (const o of gs.orders) {
+    if (o.status !== 'active') continue;
+    for (const item of o.items) {
+      if (item.done) continue;
+
+      // Large serving: consumes 2 counts from the base food batch
+      const lgBase: FoodId | null = item.food === 'fries_lg' ? 'fries'
+                                  : item.food === 'rings_lg'  ? 'rings' : null;
+      if (lgBase !== null) {
+        const idx = gs.staged.findIndex(si => !si.spoiled && si.food === lgBase && si.count >= 2);
+        if (idx !== -1) {
+          item.done = true;
+          gs.staged[idx].count -= 2;
+          if (gs.staged[idx].count <= 0) gs.staged.splice(idx, 1);
+          if (o.items.every(i => i.done)) {
+            o.status = 'plating';
+            gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
+          }
+        }
+        continue;
+      }
+
+      // Normal: exact food match, uses 1 count
+      const idx = gs.staged.findIndex(si => !si.spoiled && si.food === item.food);
+      if (idx !== -1) {
+        item.done = true;
+        const si = gs.staged[idx];
+        si.count--;
+        if (si.count <= 0) gs.staged.splice(idx, 1);
+        if (o.items.every(i => i.done)) {
+          o.status = 'plating';
+          gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
+        }
+      }
+    }
+  }
+}
+
+function tickSmoker(gs: GameState): void {
+  const smoker = gs.stations.find(s => s.kind === 'smoker');
+  if (!smoker) return;
+  for (const slot of smoker.slots) {
+    if (slot.state !== 'cooking' || slot.smokerPlacedLevel === undefined) continue;
+    if (gs.level > slot.smokerPlacedLevel && gs.levelTimer <= slot.smokerPlacedAtTimer!) {
+      slot.state = 'ready';
+      slot.timer = 0;
+    }
+  }
+}
+
+function tickChop(gs: GameState, dt: number): void {
+  if (gs.chopStored > 0 && gs.chopProgress > 0) {
+    gs.chopProgress += dt;
+    if (gs.chopProgress >= 2000) {
+      gs.chopStored--;
+      gs.chopOutput += 4;
+      gs.chopProgress = 0;
+    }
+  }
+}
+
+function spawnOrder(gs: GameState): void {
+  const lvl  = LEVELS[gs.level - 1];
+  const pool = ORDER_DEFS.filter(o => !o.hasPork || gs.level > 1);
+
+  let total = 0;
+  for (const o of pool) total += o.weight;
+  let r = Math.random() * total;
+  let chosen = pool[pool.length - 1];
+  for (let i = 0; i < pool.length; i++) {
+    r -= pool[i].weight;
+    if (r <= 0) { chosen = pool[i]; break; }
+  }
+
+  gs.orders.push({
+    id: _orderId++,
+    name: chosen.name,
+    items: chosen.items.map(food => ({ food, done: false })),
+    timeLimit: lvl.orderTimeLimit,
+    elapsed: 0,
+    status: 'active',
+    spoilTimer: 0,
+  });
+}
+
+// ─── Player movement ──────────────────────────────────────────────────────────
+
+function tickPlayer(gs: GameState, dt: number): void {
+  if (gs.activeMenu !== null && (gs.activeMenu.owner === 1 || !gs.coop)) {
+    gs.player.walkFrame = 0;
+    return;
+  }
+  if (gs.chopProgress > 0) {
+    gs.player.walkFrame = 0;
+    return;
+  }
+  const p = gs.player;
+  let dx = 0, dy = 0;
+  if (keys.has('KeyW') || (!gs.coop && keys.has('ArrowUp')))    dy -= 1;
+  if (keys.has('KeyS') || (!gs.coop && keys.has('ArrowDown')))  dy += 1;
+  if (keys.has('KeyA') || (!gs.coop && keys.has('ArrowLeft')))  dx -= 1;
+  if (keys.has('KeyD') || (!gs.coop && keys.has('ArrowRight'))) dx += 1;
+  if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+  if (dx !== 0 || dy !== 0) { p.facing = Math.atan2(dy, dx); p.walkFrame += dt / 180; }
+  const spd = PLAYER_SPEED * dt / 1000;
+  p.x = Math.max(40, Math.min(1060, p.x + dx * spd));
+  p.y = Math.max(155, Math.min(690, p.y + dy * spd));
+  resolveCollisions(p, gs.stations);
+}
+
+function tickPlayer2(gs: GameState, dt: number): void {
+  if (!gs.player2) return;
+  if (gs.activeMenu !== null && gs.activeMenu.owner === 2) {
+    gs.player2.walkFrame = 0;
+    return;
+  }
+  const p = gs.player2;
+  let dx = 0, dy = 0;
+  if (keys.has('ArrowUp'))    dy -= 1;
+  if (keys.has('ArrowDown'))  dy += 1;
+  if (keys.has('ArrowLeft'))  dx -= 1;
+  if (keys.has('ArrowRight')) dx += 1;
+  if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+  if (dx !== 0 || dy !== 0) { p.facing = Math.atan2(dy, dx); p.walkFrame += dt / 180; }
+  const spd = PLAYER_SPEED * dt / 1000;
+  p.x = Math.max(40, Math.min(1060, p.x + dx * spd));
+  p.y = Math.max(155, Math.min(690, p.y + dy * spd));
+  resolveCollisions(p, gs.stations);
+}
+
+// Push player circle out of station rectangles (AABB vs circle)
+function resolveCollisions(p: import('./types').Player, stations: import('./types').Station[]): void {
+  const R = p.radius;
+  for (const s of stations) {
+    // Expand rect by player radius, find closest point on rect to circle center
+    const nearX = Math.max(s.x, Math.min(p.x, s.x + s.w));
+    const nearY = Math.max(s.y, Math.min(p.y, s.y + s.h));
+    const distX = p.x - nearX;
+    const distY = p.y - nearY;
+    const dist2 = distX * distX + distY * distY;
+    if (dist2 >= R * R) continue; // no overlap
+
+    if (dist2 === 0) {
+      // Center exactly on rect edge — push up as fallback
+      p.y = s.y - R;
+      continue;
+    }
+    const dist = Math.sqrt(dist2);
+    const push = (R - dist) / dist;
+    p.x += distX * push;
+    p.y += distY * push;
+  }
+}
+
+// ─── Interaction ──────────────────────────────────────────────────────────────
+
+const PLATE_SENTINEL = '_plate_' as FoodId;
+
+function doInteract(gs: GameState, playerNum: 1 | 2 = 1): void {
+  const p = playerNum === 2 && gs.player2 ? gs.player2 : gs.player;
+  const s = nearestStation(p.x, p.y, gs.stations, INTERACT_RANGE);
+  if (!s) return;
+
+  // Close this player's menu if they interact with a different station
+  if (gs.activeMenu?.owner === playerNum && gs.activeMenu.stationId !== s.id) {
+    gs.activeMenu = null;
+  }
+
+  // Cooler / Freezer: toggles the menu open or closed for this player
+  if (s.kind === 'cooler' || s.kind === 'freezer') {
+    if (gs.activeMenu?.stationId === s.id && gs.activeMenu.owner === playerNum) {
+      gs.activeMenu = null;
+    } else {
+      gs.activeMenu = { stationId: s.id, owner: playerNum };
+    }
+    return;
+  }
+
+  // ── Supply: stack same ingredient up to 3; swap out anything else instantly ──
+  if (s.kind === 'supply') {
+    if (!s.produces) return;
+    if (p.held === null) {
+      p.held = { food: s.produces, count: 1, burned: false };
+    } else if (p.held.food === s.produces && !p.held.burned && p.held.count < MAX_STACK) {
+      p.held.count++;
+    } else {
+      // Different ingredient, burned item, or plate — swap it out
+      p.held = { food: s.produces, count: 1, burned: false };
+    }
+    return;
+  }
+
+  // ── Trash: discard anything ──
+  if (s.kind === 'trash') {
+    if (p.held?.burned) {
+      gs.levelWaste += getIngredientCost(p.held.food) * p.held.count;
+    }
+    p.held = null;
+    return;
+  }
+
+  // ── Cook stations ──
+  if (s.kind === 'grill' || s.kind === 'fryer' || s.kind === 'smoker') {
+    const def = p.held ? FOOD.get(p.held.food) : null;
+
+    // Cheese on ready patties: convert up to (cheese count) ready patties instantly
+    if (p.held?.food === 'cheese' && !p.held.burned && s.kind === 'grill') {
+      const readyPatties = s.slots.filter(sl => sl.state === 'ready' && sl.food === 'raw_patty');
+      const converts = Math.min(p.held.count, readyPatties.length, MAX_STACK);
+      if (converts > 0) {
+        const cheeseCost = (FOOD.get('cheese')?.cost ?? 0) * converts;
+        gs.score -= cheeseCost; gs.levelCOGS += cheeseCost;
+        for (let i = 0; i < converts; i++) {
+          readyPatties[i].food = null; readyPatties[i].state = 'empty'; readyPatties[i].timer = 0;
+        }
+        p.held = { food: 'cheese_patty', count: converts, burned: false };
+      }
+      return;
+    }
+
+    // Place raw food (consume one from stack) — charge cost on use
+    if (p.held && !p.held.burned && def?.isRaw && def.station === s.kind) {
+      if (placeOnStation(s, p.held.food)) {
+        const cost = def.cost ?? 0;
+        gs.score -= cost; gs.levelCOGS += cost;
+        if (p.held.food === 'raw_pork' && s.kind === 'smoker') {
+          const newSlot = s.slots.find(sl => sl.food === 'raw_pork' && sl.state === 'cooking' && sl.smokerPlacedLevel === undefined);
+          if (newSlot) {
+            newSlot.smokerPlacedLevel = gs.level;
+            newSlot.smokerPlacedAtTimer = gs.levelTimer;
+          }
+        }
+        p.held.count--;
+        if (p.held.count <= 0) p.held = null;
+      }
+      return;
+    }
+    // Pick up ready or burned — peek first so we don't remove without being able to hold it
+    const readySlot = s.slots.find(sl => sl.state === 'ready' || sl.state === 'burned');
+    if (readySlot && readySlot.food) {
+      const slotDef = FOOD.get(readySlot.food)!;
+      const isBurned = readySlot.state === 'burned';
+      const cookedId: FoodId | undefined = isBurned ? readySlot.food : slotDef.rawOf;
+      if (cookedId) {
+        const heldIsRaw = p.held ? FOOD.get(p.held.food)?.isRaw ?? false : false;
+        const canStack = p.held === null ||
+          (isBurned && p.held.burned && p.held.food === cookedId && p.held.count < MAX_STACK) ||
+          (!p.held.burned && !heldIsRaw && p.held.food === cookedId &&
+           p.held.count < MAX_STACK && !isBurned);
+        if (canStack) {
+          const result = pickupFromStation(s);
+          if (result) {
+            if (p.held === null) p.held = { food: result.food, count: 1, burned: result.burned };
+            else p.held.count++;
+          }
+        }
+      }
+    }
+    return;
+  }
+
+  // ── Chop table ──
+  if (s.kind === 'chop') {
+    // Step 1: place whole_pork on the table
+    if (p.held?.food === 'whole_pork' && !p.held.burned && gs.chopStored === 0 && gs.chopProgress === 0) {
+      gs.chopStored++;
+      p.held.count--;
+      if (p.held.count <= 0) p.held = null;
+      return;
+    }
+    // Step 2: start chopping (pork is loaded, not yet chopping)
+    if (gs.chopStored > 0 && gs.chopProgress === 0) {
+      gs.chopProgress = 1;
+      return;
+    }
+    // Step 3: pick up output pork
+    if (gs.chopOutput > 0 && (p.held === null || (p.held.food === 'pork' && !p.held.burned && p.held.count < MAX_STACK))) {
+      if (p.held === null) p.held = { food: 'pork', count: 1, burned: false };
+      else p.held.count++;
+      gs.chopOutput--;
+    }
+    return;
+  }
+
+  // ── Prep table ──
+  if (s.kind === 'prep') {
+    if (p.held === null) {
+      // Pick up completed plate first, then a spoiled item
+      if (gs.plates.length > 0) {
+        p.held = { food: PLATE_SENTINEL, count: 1, burned: false };
+        return;
+      }
+      const spoiledIdx = gs.staged.findIndex(si => si.spoiled);
+      if (spoiledIdx !== -1) {
+        const si = gs.staged.splice(spoiledIdx, 1)[0];
+        p.held = { food: si.food, count: 1, burned: true };
+      }
+      return;
+    }
+    // Carrying a plate — go to counter
+    if (p.held.food === PLATE_SENTINEL) return;
+    // Stack a spoiled item onto a matching burned held item
+    if (p.held.burned) {
+      const spoiledIdx = gs.staged.findIndex(si => si.spoiled && si.food === p.held!.food && p.held!.count < MAX_STACK);
+      if (spoiledIdx !== -1) {
+        gs.staged.splice(spoiledIdx, 1);
+        p.held.count++;
+      }
+      return;
+    }
+    // Drop a cooked (non-burned) item onto an active order or stage it
+    const def = FOOD.get(p.held.food);
+    if (def && !def.isRaw && p.held.food !== 'whole_pork') {
+      for (const o of gs.orders) {
+        if (o.status !== 'active') continue;
+        const slot = o.items.find(i => i.food === p.held!.food && !i.done);
+        if (slot) {
+          const food = p.held!.food;
+          slot.done = true;
+          p.held.count--;
+          if (p.held.count <= 0) p.held = null;
+          if (food === 'fries' || food === 'rings') {
+            gs.staged.push({ food, spoilTimer: 0, spoiled: false, count: 1 });
+          }
+          if (o.items.every(i => i.done)) {
+            o.status = 'plating';
+            gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
+          }
+          return;
+        }
+      }
+      // No order needs it yet — stage it on the prep table
+      const stageCount = (p.held.food === 'fries' || p.held.food === 'rings') ? 2 : 1;
+      gs.staged.push({ food: p.held.food, spoilTimer: 0, spoiled: false, count: stageCount });
+      p.held.count--;
+      if (p.held.count <= 0) p.held = null;
+    }
+    return;
+  }
+
+  // ── Counter ──
+  if (s.kind === 'counter') {
+    if (p.held?.food === PLATE_SENTINEL && gs.plates.length > 0) {
+      const plate = gs.plates.shift()!;
+      const order = gs.orders.find(o => o.id === plate.orderId);
+      if (order) {
+        const price = MEAL_PRICES[order.name] ?? 0;
+        gs.score += price;
+        gs.levelSales += price;
+        const sbi = gs.salesByItem[order.name];
+        if (sbi) { sbi.count++; sbi.revenue += price; }
+        else gs.salesByItem[order.name] = { count: 1, revenue: price };
+        checkThresholds(gs);
+        gs.completed++;
+        order.status = 'failed'; // remove from ticket board
+      }
+      p.held = null;
+    }
+    return;
+  }
+}
