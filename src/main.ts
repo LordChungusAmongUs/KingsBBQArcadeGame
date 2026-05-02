@@ -214,12 +214,18 @@ function updateLobbyXPBar(): void {
   const barEl  = document.getElementById('selfXPBar');
   const lblEl  = document.getElementById('selfLevelLabel');
   const fillEl = document.getElementById('selfXPFill');
+  const txtEl  = document.getElementById('selfXPText');
   if (!barEl || !lblEl || !fillEl) return;
   if (!prof) { barEl.style.display = 'none'; return; }
   barEl.style.display = 'block';
   const { current, needed, level } = xpProgress(prof.xp);
   lblEl.textContent = level >= 20 ? 'LEVEL MAX' : `LEVEL ${level}`;
   fillEl.style.width = level >= 20 ? '100%' : `${Math.round((current / needed) * 100)}%`;
+  if (txtEl) {
+    txtEl.textContent = level >= 20
+      ? 'MAX LEVEL'
+      : `${current.toLocaleString()} / ${needed.toLocaleString()} XP`;
+  }
 }
 
 // ─── Leaderboard ──────────────────────────────────────────────────────────────
