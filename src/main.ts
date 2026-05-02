@@ -109,6 +109,10 @@ let unsubHostLobby: (() => void) | null = null;
 let p2PredX: number | null = null;
 let p2PredY: number | null = null;
 let p2PredFacing = 0, p2PredWalk = 0;
+// Guest-side P1 interpolation (smooth P1 between snapshots)
+type P1Sample = { x: number; y: number; facing: number; walkFrame: number; t: number };
+let p1Prev: P1Sample | null = null;
+let p1Curr: P1Sample | null = null;
 // Previous P2 network input — for rising-edge menu-nav detection on host
 let _prevP2: P2InputData = { up: false, down: false, left: false, right: false, interactSeq: 0 };
 
@@ -222,7 +226,16 @@ function handleP2FromNet(inp: P2InputData): void {
   if (inp.down  && !_prevP2.down)  input.p2MenuPickDown  = true;
   if (inp.left  && !_prevP2.left)  input.p2MenuPickLeft  = true;
   if (inp.right && !_prevP2.right) input.p2MenuPickRight = true;
-  if (inp.interactSeq !== hostP2Seq) { hostP2Seq = inp.interactSeq; input.p2InteractPressed = true; }
+  if (inp.interactSeq !== hostP2Seq) {
+    hostP2Seq = inp.interactSeq;
+    // Warp P2 to where the guest was standing when they pressed interact.
+    // Without this, position drift causes nearestStation to pick the wrong station.
+    if (gs?.player2 && inp.ix !== undefined) {
+      gs.player2.x = inp.ix;
+      gs.player2.y = inp.iy!;
+    }
+    input.p2InteractPressed = true;
+  }
   _prevP2 = { ...inp };
 }
 
@@ -237,6 +250,7 @@ function cleanupOnlineGame(): void {
   isOnlineGame = false; isOnlineHost = false; activeLobbyId = null;
   remoteGs = null; lastSentInput = null;
   p2PredX = null; p2PredY = null;
+  p1Prev = null; p1Curr = null;
   _prevP2 = { up: false, down: false, left: false, right: false, interactSeq: 0 };
   touchControls.classList.remove('game-active');
 }
@@ -256,13 +270,14 @@ function startOnlineGame(lobbyId: string, asHost: boolean): void {
     remoteGs = null;
     startGuestSync(lobbyId, gs => {
       remoteGs = gs;
-      // Seed prediction from received state; running prediction accumulates from here each frame
+      // Reseed P2 prediction from authoritative snapshot
       if (gs.player2) {
-        p2PredX = gs.player2.x;
-        p2PredY = gs.player2.y;
-        p2PredFacing  = gs.player2.facing;
-        p2PredWalk    = gs.player2.walkFrame;
+        p2PredX = gs.player2.x; p2PredY = gs.player2.y;
+        p2PredFacing = gs.player2.facing; p2PredWalk = gs.player2.walkFrame;
       }
+      // Feed P1 interpolation: lerp from previous sample toward this one
+      p1Prev = p1Curr ?? { x: gs.player.x, y: gs.player.y, facing: gs.player.facing, walkFrame: gs.player.walkFrame, t: Date.now() };
+      p1Curr = { x: gs.player.x, y: gs.player.y, facing: gs.player.facing, walkFrame: gs.player.walkFrame, t: Date.now() };
     });
     // Return to menu if host disconnects
     unsubHostLobby = watchLobby(lobbyId, data => {
@@ -278,11 +293,14 @@ function guestLoop(now: number): void {
   const dt = Math.min(now - lastTime, 100);
   lastTime = now;
   if (input.restartPressed) { cleanupOnlineGame(); flushFrame(); showMenu(); return; }
-  if (input.interactPressed) guestInteractSeq++;
+  let justInteracted = false;
+  if (input.interactPressed) { guestInteractSeq++; justInteracted = true; }
   const inp: P2InputData = {
     up: keys.has('KeyW'), down: keys.has('KeyS'),
     left: keys.has('KeyA'), right: keys.has('KeyD'),
     interactSeq: guestInteractSeq,
+    // Send interact position so host can warp P2 to the right spot
+    ...(justInteracted && p2PredX !== null ? { ix: p2PredX, iy: p2PredY! } : {}),
   };
   if (!lastSentInput ||
       inp.up !== lastSentInput.up || inp.down !== lastSentInput.down ||
@@ -291,8 +309,24 @@ function guestLoop(now: number): void {
     lastSentInput = inp; pushGuestInput(inp);
   }
   if (remoteGs) {
-    // Local P2 prediction: advance P2 position each frame so guest sees their movement instantly
-    if (remoteGs.player2 && p2PredX !== null) {
+    let displayGs = remoteGs;
+
+    // P1 interpolation: lerp between last two snapshots for smooth P1 movement
+    if (p1Prev && p1Curr && p1Curr.t !== p1Prev.t) {
+      const interval = p1Curr.t - p1Prev.t;
+      const t = Math.min(1, (Date.now() - p1Curr.t) / interval);
+      let df = p1Curr.facing - p1Prev.facing;
+      if (df > Math.PI) df -= 2 * Math.PI; if (df < -Math.PI) df += 2 * Math.PI;
+      displayGs = { ...displayGs, player: { ...displayGs.player,
+        x: p1Prev.x + (p1Curr.x - p1Prev.x) * t,
+        y: p1Prev.y + (p1Curr.y - p1Prev.y) * t,
+        facing:    p1Prev.facing + df * t,
+        walkFrame: p1Prev.walkFrame + (p1Curr.walkFrame - p1Prev.walkFrame) * t,
+      }};
+    }
+
+    // P2 local prediction: advance position at 60fps so guest sees their movement instantly
+    if (displayGs.player2 && p2PredX !== null) {
       let dx = 0, dy = 0;
       if (inp.up)    dy -= 1;
       if (inp.down)  dy += 1;
@@ -303,10 +337,12 @@ function guestLoop(now: number): void {
       const spd = PLAYER_SPEED * dt / 1000;
       p2PredX = Math.max(40, Math.min(1060, p2PredX! + dx * spd));
       p2PredY = Math.max(155, Math.min(690, p2PredY! + dy * spd));
-      render({ ...remoteGs, player2: { ...remoteGs.player2, x: p2PredX, y: p2PredY, facing: p2PredFacing, walkFrame: p2PredWalk } });
-    } else {
-      render(remoteGs);
+      displayGs = { ...displayGs, player2: { ...displayGs.player2,
+        x: p2PredX, y: p2PredY, facing: p2PredFacing, walkFrame: p2PredWalk,
+      }};
     }
+
+    render(displayGs);
   } else {
     const ctx = canvas.getContext('2d')!;
     ctx.fillStyle = '#0a0804'; ctx.fillRect(0, 0, GAME_W, GAME_H);

@@ -84,6 +84,7 @@ export function leaveMatchmaking(uid: string): void {
 
 export interface P2InputData {
   up: boolean; down: boolean; left: boolean; right: boolean; interactSeq: number;
+  ix?: number; iy?: number; // P2 position at moment of interact press
 }
 
 export interface GameSnapshot {
@@ -125,7 +126,7 @@ export function startHostSync(
     const gs = getState();
     if (!gs || !_stateRef) return;
     set(_stateRef, buildSnapshot(gs)).catch(() => {});
-  }, 50);
+  }, 30);
 }
 
 export function stopHostSync(lobbyId: string): void {
