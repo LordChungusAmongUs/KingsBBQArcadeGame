@@ -2,7 +2,7 @@ import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp, keys } from
 import { createGame, tickGame } from './game';
 import { initRenderer, render, resizeRenderer, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay } from './renderer';
 import type { GameState, CookSlot } from './types';
-import { LEVELS, STARTING_MONEY } from './config';
+import { LEVELS, STARTING_MONEY, PLAYER_SPEED } from './config';
 import { loadLeaderboard, saveEntry, type LeaderboardEntry } from './leaderboard';
 import { initAuth, signInWithGoogle, signOutUser } from './auth';
 import type { User } from 'firebase/auth';
@@ -105,6 +105,12 @@ let remoteGs: GameState | null = null;
 let guestInteractSeq = 0, hostP2Seq = 0;
 let lastSentInput: P2InputData | null = null;
 let unsubHostLobby: (() => void) | null = null;
+// Guest-side P2 prediction (so guest sees their own movement instantly)
+let p2PredX: number | null = null;
+let p2PredY: number | null = null;
+let p2PredFacing = 0, p2PredWalk = 0;
+// Previous P2 network input — for rising-edge menu-nav detection on host
+let _prevP2: P2InputData = { up: false, down: false, left: false, right: false, interactSeq: 0 };
 
 // ─── Lobby state ──────────────────────────────────────────────────────────────
 
@@ -207,11 +213,17 @@ function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFa
 // ─── Online co-op ─────────────────────────────────────────────────────────────
 
 function handleP2FromNet(inp: P2InputData): void {
-  if (inp.up) keys.add('ArrowUp'); else keys.delete('ArrowUp');
-  if (inp.down) keys.add('ArrowDown'); else keys.delete('ArrowDown');
-  if (inp.left) keys.add('ArrowLeft'); else keys.delete('ArrowLeft');
+  if (inp.up)    keys.add('ArrowUp');    else keys.delete('ArrowUp');
+  if (inp.down)  keys.add('ArrowDown');  else keys.delete('ArrowDown');
+  if (inp.left)  keys.add('ArrowLeft');  else keys.delete('ArrowLeft');
   if (inp.right) keys.add('ArrowRight'); else keys.delete('ArrowRight');
+  // Rising-edge detection for menu navigation (keys Set bypass doesn't fire event listeners)
+  if (inp.up    && !_prevP2.up)    input.p2MenuPickUp    = true;
+  if (inp.down  && !_prevP2.down)  input.p2MenuPickDown  = true;
+  if (inp.left  && !_prevP2.left)  input.p2MenuPickLeft  = true;
+  if (inp.right && !_prevP2.right) input.p2MenuPickRight = true;
   if (inp.interactSeq !== hostP2Seq) { hostP2Seq = inp.interactSeq; input.p2InteractPressed = true; }
+  _prevP2 = { ...inp };
 }
 
 function cleanupOnlineGame(): void {
@@ -224,6 +236,8 @@ function cleanupOnlineGame(): void {
   }
   isOnlineGame = false; isOnlineHost = false; activeLobbyId = null;
   remoteGs = null; lastSentInput = null;
+  p2PredX = null; p2PredY = null;
+  _prevP2 = { up: false, down: false, left: false, right: false, interactSeq: 0 };
   touchControls.classList.remove('game-active');
 }
 
@@ -236,10 +250,20 @@ function startOnlineGame(lobbyId: string, asHost: boolean): void {
     startLevel(1, STARTING_MONEY);
   } else {
     guestInteractSeq = 0; lastSentInput = null;
+    p2PredX = null; p2PredY = null;
     menu.style.display = 'none';
     touchControls.classList.add('game-active');
     remoteGs = null;
-    startGuestSync(lobbyId, gs => { remoteGs = gs; });
+    startGuestSync(lobbyId, gs => {
+      remoteGs = gs;
+      // Seed prediction from received state; running prediction accumulates from here each frame
+      if (gs.player2) {
+        p2PredX = gs.player2.x;
+        p2PredY = gs.player2.y;
+        p2PredFacing  = gs.player2.facing;
+        p2PredWalk    = gs.player2.walkFrame;
+      }
+    });
     // Return to menu if host disconnects
     unsubHostLobby = watchLobby(lobbyId, data => {
       if (!data) { cleanupOnlineGame(); showMenu(); }
@@ -251,6 +275,7 @@ function startOnlineGame(lobbyId: string, asHost: boolean): void {
 
 function guestLoop(now: number): void {
   if (!isOnlineGame || isOnlineHost) return;
+  const dt = Math.min(now - lastTime, 100);
   lastTime = now;
   if (input.restartPressed) { cleanupOnlineGame(); flushFrame(); showMenu(); return; }
   if (input.interactPressed) guestInteractSeq++;
@@ -266,7 +291,22 @@ function guestLoop(now: number): void {
     lastSentInput = inp; pushGuestInput(inp);
   }
   if (remoteGs) {
-    render(remoteGs);
+    // Local P2 prediction: advance P2 position each frame so guest sees their movement instantly
+    if (remoteGs.player2 && p2PredX !== null) {
+      let dx = 0, dy = 0;
+      if (inp.up)    dy -= 1;
+      if (inp.down)  dy += 1;
+      if (inp.left)  dx -= 1;
+      if (inp.right) dx += 1;
+      if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+      if (dx !== 0 || dy !== 0) { p2PredFacing = Math.atan2(dy, dx); p2PredWalk += dt / 180; }
+      const spd = PLAYER_SPEED * dt / 1000;
+      p2PredX = Math.max(40, Math.min(1060, p2PredX! + dx * spd));
+      p2PredY = Math.max(155, Math.min(690, p2PredY! + dy * spd));
+      render({ ...remoteGs, player2: { ...remoteGs.player2, x: p2PredX, y: p2PredY, facing: p2PredFacing, walkFrame: p2PredWalk } });
+    } else {
+      render(remoteGs);
+    }
   } else {
     const ctx = canvas.getContext('2d')!;
     ctx.fillStyle = '#0a0804'; ctx.fillRect(0, 0, GAME_W, GAME_H);

@@ -125,7 +125,7 @@ export function startHostSync(
     const gs = getState();
     if (!gs || !_stateRef) return;
     set(_stateRef, buildSnapshot(gs)).catch(() => {});
-  }, 200);
+  }, 50);
 }
 
 export function stopHostSync(lobbyId: string): void {
