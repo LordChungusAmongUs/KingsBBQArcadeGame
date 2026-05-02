@@ -161,6 +161,36 @@
     }
     #dPause:active { background: rgba(100,100,100,0.4); }
 
+    /* ── Rotate overlay ─────────────────────────────────────────────── */
+    #rotateOverlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #0a0804;
+      z-index: 100;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.2rem;
+    }
+    #rotateOverlay .rotate-icon {
+      font-size: 4rem;
+      animation: spin90 1.2s ease-in-out infinite alternate;
+    }
+    @keyframes spin90 {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(90deg); }
+    }
+    #rotateOverlay p {
+      color: #f84;
+      font-size: 1rem;
+      letter-spacing: 0.2em;
+      text-align: center;
+    }
+    @media (orientation: portrait) and (hover: none) {
+      #rotateOverlay { display: flex; }
+    }
+
     /* ── Mobile menu tweaks ─────────────────────────────────────────── */
     @media (max-width: 600px) {
       #menuTitle { font-size: 2rem; }
@@ -243,6 +273,18 @@
       </div>
     </div>
   </div>
+  <!-- Portrait rotation blocker -->
+  <div id="rotateOverlay">
+    <div class="rotate-icon">📱</div>
+    <p>ROTATE TO LANDSCAPE<br>TO PLAY</p>
+  </div>
+
+  <script>
+    // Try to lock orientation to landscape on supported browsers
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(() => {});
+    }
+  </script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
