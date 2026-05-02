@@ -83,25 +83,34 @@ function drawKitchenFloor(): void {
 // ─── Stations ─────────────────────────────────────────────────────────────────
 
 function drawStations(gs: GameState): void {
-  const nearSt = nearestStation(gs.player.x, gs.player.y, gs.stations, INTERACT_RANGE);
+  const nearSt  = nearestStation(gs.player.x,  gs.player.y,  gs.stations, INTERACT_RANGE);
+  const nearSt2 = gs.player2
+    ? nearestStation(gs.player2.x, gs.player2.y, gs.stations, INTERACT_RANGE)
+    : null;
 
   for (const s of gs.stations) {
-    const highlight = s === nearSt;
+    const hl1 = s === nearSt;
+    const hl2 = s === nearSt2;
 
     if (s.kind === 'supply') continue; // no supply stations in current layout
 
     if (s.kind === 'cooler' || s.kind === 'freezer') {
-      drawCoolerFreezer(gs, s, highlight);
+      drawCoolerFreezer(gs, s, hl1, hl2);
       continue;
     }
 
     // Station body
     ctx.fillStyle = s.color;
     ctx.fillRect(s.x, s.y, s.w, s.h);
-    if (highlight) {
+    if (hl1) {
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 2;
       ctx.strokeRect(s.x + 1, s.y + 1, s.w - 2, s.h - 2);
+    }
+    if (hl2) {
+      ctx.strokeStyle = '#44aaff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(s.x + 3, s.y + 3, s.w - 6, s.h - 6);
     }
 
     // Label
@@ -256,16 +265,23 @@ function menuSlotLayout(count: number): Array<{ idx: number; dx: number; dy: num
   ];
 }
 
-function drawCoolerFreezer(gs: GameState, s: Station, highlight: boolean): void {
+function drawCoolerFreezer(gs: GameState, s: Station, highlight: boolean, highlight2 = false): void {
   const isCooler = s.kind === 'cooler';
   const accent = isCooler ? '#5ac8fa' : '#4a8fff';
 
   // Station body
   ctx.fillStyle = isCooler ? '#182430' : '#0e1828';
   ctx.fillRect(s.x, s.y, s.w, s.h);
-  ctx.strokeStyle = highlight ? '#fff' : accent;
-  ctx.lineWidth = highlight ? 2 : 1;
+  ctx.strokeStyle = accent; ctx.lineWidth = 1;
   ctx.strokeRect(s.x, s.y, s.w, s.h);
+  if (highlight) {
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.strokeRect(s.x, s.y, s.w, s.h);
+  }
+  if (highlight2) {
+    ctx.strokeStyle = '#44aaff'; ctx.lineWidth = 2;
+    ctx.strokeRect(s.x + 2, s.y + 2, s.w - 4, s.h - 4);
+  }
 
   ctx.fillStyle = accent;
   ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';

@@ -207,8 +207,8 @@ function snapshotToGameState(snap: GameSnapshot): GameState {
     if (st) st.slots = toSparseArr(ss.slots, st.slots.length) as GameState['stations'][0]['slots'];
   }
   return {
-    player:  { ...snap.p,  vx: 0, vy: 0, radius: 18 },
-    player2: snap.p2 ? { ...snap.p2, vx: 0, vy: 0, radius: 18 } : null,
+    player:  { ...snap.p,  held: snap.p.held  ?? null, vx: 0, vy: 0, radius: 18 },
+    player2: snap.p2 ? { ...snap.p2, held: snap.p2.held ?? null, vx: 0, vy: 0, radius: 18 } : null,
     coop: true, stations,
     orders: toArr(snap.orders), plates: toArr(snap.plates), staged: toArr(snap.staged),
     score: snap.score, level: snap.level, levelTimer: snap.levelTimer, nextOrderIn: 0,
@@ -216,7 +216,7 @@ function snapshotToGameState(snap: GameSnapshot): GameState {
     phase: snap.phase as GameState['phase'],
     levelEndTimer: snap.levelEndTimer, prepTimer: snap.prepTimer, laborAccum: 0,
     chopStored: snap.chopStored, chopProgress: snap.chopProgress, chopOutput: snap.chopOutput,
-    activeMenu: snap.activeMenu, maxFails: snap.maxFails, thresholdsUnlocked: snap.thresholdsUnlocked,
+    activeMenu: snap.activeMenu ?? null, maxFails: snap.maxFails, thresholdsUnlocked: snap.thresholdsUnlocked,
     levelSales: snap.levelSales, levelCOGS: snap.levelCOGS, levelLabor: snap.levelLabor,
     levelWaste: snap.levelWaste, salesByItem: snap.salesByItem ?? {},
   };

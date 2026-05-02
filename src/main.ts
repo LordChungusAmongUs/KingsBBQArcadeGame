@@ -276,13 +276,16 @@ function startOnlineGame(lobbyId: string, asHost: boolean): void {
           p2PredX = gs.player2.x; p2PredY = gs.player2.y;
           p2PredFacing = gs.player2.facing; p2PredWalk = gs.player2.walkFrame;
         } else {
-          // Only snap if P2 has drifted far (wall collision host knows about, prediction doesn't)
           const drift = Math.hypot(p2PredX - gs.player2.x, p2PredY! - gs.player2.y);
           if (drift > 60) {
+            // Large drift (wall teleport, etc.) — snap immediately
             p2PredX = gs.player2.x; p2PredY = gs.player2.y;
             p2PredFacing = gs.player2.facing; p2PredWalk = gs.player2.walkFrame;
+          } else if (drift > 2) {
+            // Small drift — gently pull prediction toward authoritative position
+            p2PredX = p2PredX! + (gs.player2.x - p2PredX!) * 0.25;
+            p2PredY = p2PredY! + (gs.player2.y - p2PredY!) * 0.25;
           }
-          // Small drift (< 60px) is normal input-lag; leave prediction alone so it stays smooth
         }
       }
       // Feed P1 interpolation: lerp from previous sample toward this one
@@ -337,20 +340,25 @@ function guestLoop(now: number): void {
 
     // P2 local prediction: advance position at 60fps so guest sees their movement instantly
     if (displayGs.player2 && p2PredX !== null) {
-      let dx = 0, dy = 0;
-      if (inp.up)    dy -= 1;
-      if (inp.down)  dy += 1;
-      if (inp.left)  dx -= 1;
-      if (inp.right) dx += 1;
-      if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
-      if (dx !== 0 || dy !== 0) { p2PredFacing = Math.atan2(dy, dx); p2PredWalk += dt / 180; }
-      const spd = PLAYER_SPEED * dt / 1000;
-      p2PredX = Math.max(40, Math.min(1060, p2PredX! + dx * spd));
-      p2PredY = Math.max(155, Math.min(690, p2PredY! + dy * spd));
-      // Apply same collision resolution as host so P2 stops cleanly at walls/stations
-      const p2tmp = { x: p2PredX, y: p2PredY, radius: 18 } as any;
-      resolveCollisions(p2tmp, remoteGs.stations);
-      p2PredX = p2tmp.x; p2PredY = p2tmp.y;
+      if (remoteGs.activeMenu?.owner === 2) {
+        // P2's cooler/freezer menu is open on host — freeze P2 in place
+        p2PredWalk = 0;
+      } else {
+        let dx = 0, dy = 0;
+        if (inp.up)    dy -= 1;
+        if (inp.down)  dy += 1;
+        if (inp.left)  dx -= 1;
+        if (inp.right) dx += 1;
+        if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+        if (dx !== 0 || dy !== 0) { p2PredFacing = Math.atan2(dy, dx); p2PredWalk += dt / 180; }
+        const spd = PLAYER_SPEED * dt / 1000;
+        p2PredX = Math.max(40, Math.min(1060, p2PredX! + dx * spd));
+        p2PredY = Math.max(155, Math.min(690, p2PredY! + dy * spd));
+        // Apply same collision resolution as host so P2 stops cleanly at walls/stations
+        const p2tmp = { x: p2PredX, y: p2PredY, radius: 18 } as any;
+        resolveCollisions(p2tmp, remoteGs.stations);
+        p2PredX = p2tmp.x; p2PredY = p2tmp.y;
+      }
       displayGs = { ...displayGs, player2: { ...displayGs.player2,
         x: p2PredX!, y: p2PredY!, facing: p2PredFacing, walkFrame: p2PredWalk,
       }};
