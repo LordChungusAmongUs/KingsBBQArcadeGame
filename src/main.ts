@@ -1,4 +1,11 @@
-import { initAudio, playMusic, stopMusic } from './audio';
+import { initAudio, playMusic, playPlaylist, stopMusic } from './audio';
+
+// ── In-game soundtrack playlist (drop files in public/audio/) ──────────────
+const GAME_TRACKS = [
+  '/audio/game1.mp3',
+  '/audio/game2.mp3',
+  '/audio/game3.mp3',
+];
 import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp, keys } from './input';
 import { createGame, tickGame, resolveCollisions } from './game';
 import { initRenderer, render, resizeRenderer, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu } from './renderer';
@@ -320,6 +327,7 @@ function enterLeaderboard(): void {
   if (leaderboardReturn !== 'menu') return;
   const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   if (isTouch) document.getElementById('lbTapHint')!.style.display = 'flex';
+  playMusic('/audio/score.mp3');
 }
 
 function dismissLeaderboard(): void {
@@ -373,8 +381,8 @@ function hideMobileNameEntry(): void {
 function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0): void {
   if (n === 1) {
     incrementStat(isCoop ? 'coop_sessions' : 'solo_sessions', 1);
-    // Defer stop so the Play button click first unlocks audio, then cuts the music
-    setTimeout(stopMusic, 50);
+    // Small delay so the Play-button click unlocks audio before we switch tracks
+    setTimeout(() => playPlaylist(GAME_TRACKS), 80);
   }
   currentLevel = n; screen = 'game'; isPaused = false;
   gs = createGame(n, carryScore, isCoop, smokerSlots, carryFailed, thresholdsUnlocked);
@@ -962,6 +970,7 @@ document.getElementById('fsBtn')!.addEventListener('click', toggleFullscreen);
 
 window.addEventListener('keydown', e => {
   if (e.repeat) return;
+  { const s = document.getElementById('splashScreen'); if (s && s.style.display !== 'none') { s.style.display = 'none'; showMenu(); return; } }
   if (e.code === 'KeyF') toggleFullscreen();
   if (e.code === 'KeyP' && screen === 'game' && gs?.phase === 'playing') {
     isPaused = !isPaused;
@@ -973,6 +982,17 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Space' || e.code === 'Enter')          { e.preventDefault(); menuBtns[menuFocusIdx].click(); }
 });
 
-updateMenuLeaderboard();
-setTimeout(() => focusMenuBtn(0), 0);
+// ── Splash screen ─────────────────────────────────────────────────────────────
+const splashEl = document.getElementById('splashScreen')!;
+menu.style.display = 'none';
+
+function dismissSplash(): void {
+  if (splashEl.style.display === 'none') return;
+  splashEl.style.display = 'none';
+  showMenu();
+}
+
+splashEl.addEventListener('click',      dismissSplash);
+splashEl.addEventListener('touchstart', dismissSplash);
+
 playMusic('/audio/theme.mp3');

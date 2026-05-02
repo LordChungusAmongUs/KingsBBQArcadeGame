@@ -367,6 +367,23 @@
     #rotateOverlay p { color: #f84; font-size: 1rem; letter-spacing: 0.2em; text-align: center; }
     @media (orientation: portrait) and (hover: none) { #rotateOverlay { display: flex; } }
 
+    /* ── Splash screen ──────────────────────────────────────────────── */
+    #splashScreen {
+      display: flex; position: fixed; inset: 0; z-index: 60;
+      background: #000; align-items: center; justify-content: center;
+      cursor: pointer;
+    }
+    #splashScreen img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    #splashTapHint {
+      position: absolute; bottom: 6%; left: 50%; transform: translateX(-50%);
+      color: #fa4; font-size: 0.85rem; letter-spacing: 0.35em;
+      font-family: 'Courier New', monospace;
+      animation: pgPulse 1.2s ease-in-out infinite;
+      pointer-events: none; white-space: nowrap;
+    }
+
     /* ── Post-game overlays ─────────────────────────────────────────── */
     #lbTapHint {
       display: none; position: absolute; inset: 0; z-index: 30;
@@ -575,6 +592,12 @@
       <div id="neScore"></div>
       <input id="neInput" type="text" maxlength="3" autocomplete="off" spellcheck="false" placeholder="AAA" />
       <button id="neSubmit">CONFIRM</button>
+    </div>
+
+    <!-- ── Splash screen ────────────────────────────────────────────── -->
+    <div id="splashScreen">
+      <img src="/images/splash.png" alt="Kings BBQ Bonanza">
+      <div id="splashTapHint">TAP TO CONTINUE</div>
     </div>
 
     <!-- ── Leaderboard tap-to-continue hint ─────────────────────────── -->
