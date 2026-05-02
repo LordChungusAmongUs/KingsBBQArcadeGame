@@ -4,7 +4,7 @@ import { initRenderer, render, resizeRenderer, drawNameEntry, drawLeaderboard, d
 import type { GameState, CookSlot } from './types';
 import { LEVELS, STARTING_MONEY, PLAYER_SPEED } from './config';
 import { loadLeaderboard, saveEntry, type LeaderboardEntry } from './leaderboard';
-import { initAuth, signInWithGoogle, signOutUser } from './auth';
+import { initAuth, signInWithGoogle, signOutUser, checkRedirectResult } from './auth';
 import type { User } from 'firebase/auth';
 import {
   loadProfile, clearProfile, flushSession, getProfile,
@@ -64,10 +64,19 @@ initTouchControls();
 
 let user: User | null = null;
 
+// Must be called before any auth state is read; resolves any pending redirect sign-in.
+checkRedirectResult().catch(console.error);
+
 initAuth(u => {
   user = u;
   if (u) {
-    loadProfile(u.uid).then(() => updateAuthUI()).catch(console.error);
+    loadProfile(u.uid).then(() => {
+      updateAuthUI();
+      if (sessionStorage.getItem('kbbq_pendingLobby')) {
+        sessionStorage.removeItem('kbbq_pendingLobby');
+        openLobbyScreen();
+      }
+    }).catch(console.error);
   } else {
     clearProfile();
     updateAuthUI();

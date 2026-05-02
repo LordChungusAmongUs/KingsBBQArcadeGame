@@ -160,14 +160,14 @@ export function pickupFromStation(s: Station): { food: FoodId; burned: boolean }
       const def = slot.food ? FOOD.get(slot.food) : null;
       const cooked = def?.rawOf ?? null;
       slot.food = null; slot.state = 'empty'; slot.timer = 0;
-      slot.smokerPlacedLevel = undefined; slot.smokerPlacedAtTimer = undefined;
+      delete slot.smokerPlacedLevel; delete slot.smokerPlacedAtTimer;
       if (!cooked) return null;
       return { food: cooked, burned: false };
     }
     if (slot.state === 'burned') {
       const food = slot.food!;
       slot.food = null; slot.state = 'empty'; slot.timer = 0;
-      slot.smokerPlacedLevel = undefined; slot.smokerPlacedAtTimer = undefined;
+      delete slot.smokerPlacedLevel; delete slot.smokerPlacedAtTimer;
       return { food, burned: true };
     }
   }
