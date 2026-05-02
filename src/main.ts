@@ -224,8 +224,8 @@ function loop(now: number): void {
 
   tickGame(gs, dt);
 
-  // Level transition — Space skips or auto after timer
-  if (gs.phase === 'level_end' && (gs.levelEndTimer <= 0 || input.p2InteractPressed)) {
+  // Level transition — tap/Space/E skips or auto after timer
+  if (gs.phase === 'level_end' && (gs.levelEndTimer <= 0 || input.p2InteractPressed || input.interactPressed)) {
     if (gs.level < LEVELS.length) {
       const smoker = gs.stations.find(s => s.kind === 'smoker');
       const smokerSlots = smoker?.slots.map(sl => ({ ...sl }));
