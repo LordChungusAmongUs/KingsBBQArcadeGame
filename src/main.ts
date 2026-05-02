@@ -373,7 +373,8 @@ function hideMobileNameEntry(): void {
 function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0): void {
   if (n === 1) {
     incrementStat(isCoop ? 'coop_sessions' : 'solo_sessions', 1);
-    stopMusic();
+    // Defer stop so the Play button click first unlocks audio, then cuts the music
+    setTimeout(stopMusic, 50);
   }
   currentLevel = n; screen = 'game'; isPaused = false;
   gs = createGame(n, carryScore, isCoop, smokerSlots, carryFailed, thresholdsUnlocked);
@@ -974,3 +975,4 @@ window.addEventListener('keydown', e => {
 
 updateMenuLeaderboard();
 setTimeout(() => focusMenuBtn(0), 0);
+playMusic('/audio/theme.mp3');
