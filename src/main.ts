@@ -174,6 +174,8 @@ let p2PredFacing = 0, p2PredWalk = 0;
 // Last authoritative P2 position received from host (used only when standing still)
 let p2AuthX: number | null = null;
 let p2AuthY: number | null = null;
+// Frames P2 has been stopped; correction is delayed until auth catches up
+let p2StoppedFrames = 0;
 // Guest-side P1 interpolation (smooth P1 between snapshots)
 type P1Sample = { x: number; y: number; facing: number; walkFrame: number; t: number };
 let p1Prev: P1Sample | null = null;
@@ -412,7 +414,7 @@ function cleanupOnlineGame(): void {
   }
   isOnlineGame = false; isOnlineHost = false; activeLobbyId = null;
   remoteGs = null; lastSentInput = null;
-  p2PredX = null; p2PredY = null; p2AuthX = null; p2AuthY = null;
+  p2PredX = null; p2PredY = null; p2AuthX = null; p2AuthY = null; p2StoppedFrames = 0;
   p1Prev = null; p1Curr = null;
   _prevP2 = { up: false, down: false, left: false, right: false, interactSeq: 0 };
   touchControls.classList.remove('game-active');
@@ -428,7 +430,7 @@ function startOnlineGame(lobbyId: string, asHost: boolean): void {
   } else {
     incrementStat('coop_sessions', 1);
     guestInteractSeq = 0; lastSentInput = null;
-    p2PredX = null; p2PredY = null; p2AuthX = null; p2AuthY = null;
+    p2PredX = null; p2PredY = null; p2AuthX = null; p2AuthY = null; p2StoppedFrames = 0;
     menu.style.display = 'none';
     touchControls.classList.add('game-active');
     remoteGs = null;
@@ -516,15 +518,22 @@ function guestLoop(now: number): void {
         p2PredX = p2tmp.x; p2PredY = p2tmp.y;
       }
       // Only reconcile while standing still so movement is never pulled backward.
+      // Wait 12 frames after stopping before correcting — gives auth position time
+      // to catch up from its latency lag, preventing a backward bounce on stop.
       const isMoving = inp.up || inp.down || inp.left || inp.right;
-      if (!isMoving && p2AuthX !== null) {
+      if (isMoving) {
+        p2StoppedFrames = 0;
+      } else {
+        p2StoppedFrames++;
+      }
+      if (!isMoving && p2StoppedFrames > 12 && p2AuthX !== null) {
         const err = Math.hypot(p2PredX! - p2AuthX, p2PredY! - p2AuthY!);
-        if (err > 60) {
-          // Large error while stopped (interaction moved P2) — snap immediately
+        if (err > 120) {
+          // Only hard-snap for extreme drift (e.g. server-side teleport / interaction)
           p2PredX = p2AuthX; p2PredY = p2AuthY!;
         } else if (err > 3) {
-          p2PredX = p2PredX! + (p2AuthX - p2PredX!) * 0.25;
-          p2PredY = p2PredY! + (p2AuthY! - p2PredY!) * 0.25;
+          p2PredX = p2PredX! + (p2AuthX - p2PredX!) * 0.1;
+          p2PredY = p2PredY! + (p2AuthY! - p2PredY!) * 0.1;
         }
       }
       displayGs = { ...displayGs, player2: { ...displayGs.player2,
