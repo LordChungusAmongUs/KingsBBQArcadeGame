@@ -2,26 +2,52 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Kings BBQ Bonanza</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #0a0804; overflow: hidden; font-family: 'Courier New', monospace; color: #ccc; }
-    #app { position: relative; width: 100vw; height: 100vh; }
-    #gameCanvas { display: block; width: 100%; height: 100%; }
+    body {
+      background: #000;
+      overflow: hidden;
+      font-family: 'Courier New', monospace;
+      color: #ccc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    #app {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0a0804;
+    }
+    #gameCanvas {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      aspect-ratio: 1183 / 680;
+      image-rendering: pixelated;
+    }
     #menu {
       position: absolute; inset: 0; display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
+      align-items: center; justify-content: flex-start;
       background: linear-gradient(160deg, #1a0c04, #0a0804); z-index: 10;
+      overflow-y: auto; padding: 1.5rem 1rem;
     }
-    #menuTitle { font-size: 3rem; letter-spacing: 0.15em; color: #f84; margin-bottom: 0.2em; text-shadow: 0 0 40px #f842; }
+    #menuTitle { font-size: 3rem; letter-spacing: 0.15em; color: #f84; margin-bottom: 0.2em; text-shadow: 0 0 40px #f842; text-align: center; }
     #menu h2 { font-size: 1rem; letter-spacing: 0.3em; color: #986; margin-bottom: 0.4em; }
-    #menu p  { color: #765; font-size: 0.85rem; max-width: 480px; text-align: center; line-height: 1.8; margin-bottom: 2.5em; }
-    .menuBtns { display: flex; gap: 1.2rem; }
+    #menu p  { color: #765; font-size: 0.85rem; max-width: 480px; text-align: center; line-height: 1.8; margin-bottom: 2em; }
+    .menuBtns { display: flex; gap: 1.2rem; flex-wrap: wrap; justify-content: center; }
     #startBtn, #coopBtn, #fsBtn {
       padding: 0.9rem 2.8rem; background: transparent;
       font-family: inherit; font-size: 1.1rem; letter-spacing: 0.3em;
       cursor: pointer; transition: background 0.2s, color 0.2s;
+      touch-action: manipulation;
     }
     #startBtn  { border: 2px solid #f84; color: #f84; }
     #startBtn:hover, #startBtn:focus  { background: #f842; color: #fff; outline: none; }
@@ -29,8 +55,8 @@
     #coopBtn:hover, #coopBtn:focus    { background: #4af3; color: #fff; outline: none; }
     #fsBtn     { border: 2px solid #585; color: #585; font-size: 0.85rem; padding: 0.9rem 1.6rem; }
     #fsBtn:hover, #fsBtn:focus        { background: #5853; color: #afa; outline: none; }
-    .controls { margin-top: 2rem; color: #554; font-size: 0.78rem; letter-spacing: 0.1em; text-align: center; line-height: 2; }
-    .menu-ref { margin-top: 1.8rem; width: 100%; max-width: 860px; }
+    .controls { margin-top: 1.5rem; color: #554; font-size: 0.78rem; letter-spacing: 0.1em; text-align: center; line-height: 2; }
+    .menu-ref { margin-top: 1.5rem; width: 100%; max-width: 860px; }
     .menu-ref h3 { font-size: 0.75rem; letter-spacing: 0.35em; color: #8a6a40; margin-bottom: 0.8rem; text-align: center; }
     .recipe-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
     .recipe-col { background: rgba(255,255,255,0.03); border: 1px solid #2a1e10; padding: 0.7rem 0.9rem; border-radius: 4px; }
@@ -38,7 +64,7 @@
     .recipe-item { font-size: 0.72rem; line-height: 1.9; color: #887060; }
     .recipe-item .abbr { color: #d4a84a; font-weight: bold; }
     .recipe-note { margin-top: 0.7rem; font-size: 0.7rem; color: #665040; text-align: center; letter-spacing: 0.15em; }
-    #hiscores { margin-top: 1.6rem; width: 100%; max-width: 420px; }
+    #hiscores { margin-top: 1.6rem; width: 100%; max-width: 420px; margin-bottom: 1.5rem; }
     #hiscores h3 { font-size: 0.72rem; letter-spacing: 0.35em; color: #f84; text-align: center; margin-bottom: 0.6rem; }
     .hs-row { display: flex; gap: 0.8rem; font-size: 0.75rem; line-height: 2; border-bottom: 1px solid #1a1208; padding: 0 0.4rem; }
     .hs-rank { color: #554; width: 1.6rem; flex-shrink: 0; }
@@ -46,6 +72,109 @@
     .hs-score { color: #cca; flex: 1; }
     .hs-level { color: #654; }
     .hs-empty { font-size: 0.72rem; color: #443; text-align: center; padding: 0.5rem; }
+
+    /* ── Touch controls ──────────────────────────────────────────────── */
+    #touchControls {
+      display: none;
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 180px;
+      pointer-events: none;
+      z-index: 20;
+      padding: 12px 16px;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    #touchControls.touch-visible.game-active {
+      display: flex;
+    }
+    .dpad {
+      display: grid;
+      grid-template-areas:
+        ". up ."
+        "left . right"
+        ". down .";
+      grid-template-columns: 64px 64px 64px;
+      grid-template-rows: 64px 64px 64px;
+      gap: 4px;
+      pointer-events: all;
+    }
+    .dpad-btn {
+      background: rgba(255,200,100,0.15);
+      border: 2px solid rgba(255,200,100,0.35);
+      border-radius: 10px;
+      color: #f84;
+      font-size: 1.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    .dpad-btn:active { background: rgba(255,200,100,0.35); }
+    #dUp    { grid-area: up; }
+    #dLeft  { grid-area: left; }
+    #dRight { grid-area: right; }
+    #dDown  { grid-area: down; }
+    .touch-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+      pointer-events: all;
+    }
+    #dInteract {
+      width: 90px; height: 90px;
+      background: rgba(255,100,50,0.2);
+      border: 2px solid rgba(255,100,50,0.5);
+      border-radius: 50%;
+      color: #f84;
+      font-family: 'Courier New', monospace;
+      font-size: 1.4rem;
+      font-weight: bold;
+      letter-spacing: 0.1em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    #dInteract:active { background: rgba(255,100,50,0.45); }
+    #dPause {
+      width: 56px; height: 36px;
+      background: rgba(100,100,100,0.2);
+      border: 1px solid rgba(150,150,150,0.3);
+      border-radius: 8px;
+      color: #888;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    #dPause:active { background: rgba(100,100,100,0.4); }
+
+    /* ── Mobile menu tweaks ─────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      #menuTitle { font-size: 2rem; }
+      #menu p { font-size: 0.8rem; margin-bottom: 1.2em; }
+      .menuBtns { flex-direction: column; align-items: stretch; gap: 0.7rem; }
+      #startBtn, #coopBtn, #fsBtn { padding: 1rem; font-size: 1rem; }
+      .recipe-grid { grid-template-columns: 1fr; }
+      .controls { font-size: 0.7rem; }
+    }
+    @media (max-height: 500px) and (orientation: landscape) {
+      #menuTitle { font-size: 1.6rem; margin-bottom: 0.1em; }
+      #menu p { display: none; }
+      .menu-ref { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -63,7 +192,7 @@
       <div class="controls">
         P1: WASD — move &nbsp;|&nbsp; E — interact<br>
         P2: ARROW KEYS — move &nbsp;|&nbsp; SPACE — interact<br>
-        R — restart
+        R — restart &nbsp;|&nbsp; P — pause &nbsp;|&nbsp; F — fullscreen
       </div>
       <div class="menu-ref">
         <h3>MENU &amp; INGREDIENTS</h3>
@@ -97,6 +226,20 @@
       <div id="hiscores">
         <h3>— HIGH SCORES —</h3>
         <div id="hiscores-list"><div class="hs-empty">no scores yet — get cooking!</div></div>
+      </div>
+    </div>
+
+    <!-- Touch controls (shown only on touch devices during gameplay) -->
+    <div id="touchControls">
+      <div class="dpad">
+        <button class="dpad-btn" id="dUp">▲</button>
+        <button class="dpad-btn" id="dLeft">◄</button>
+        <button class="dpad-btn" id="dRight">►</button>
+        <button class="dpad-btn" id="dDown">▼</button>
+      </div>
+      <div class="touch-right">
+        <button id="dPause">⏸</button>
+        <button id="dInteract">ACT</button>
       </div>
     </div>
   </div>

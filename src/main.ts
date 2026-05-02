@@ -1,4 +1,4 @@
-import { initInput, flushFrame, input } from './input';
+import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp } from './input';
 import { createGame, tickGame } from './game';
 import { initRenderer, render, resizeRenderer, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay } from './renderer';
 import type { GameState, CookSlot } from './types';
@@ -8,16 +8,45 @@ import { loadLeaderboard, saveEntry, type LeaderboardEntry } from './leaderboard
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement;
 const menu   = document.getElementById('menu')!;
 
-function resize(): void {
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
-  resizeRenderer(canvas);
-}
-resize();
-window.addEventListener('resize', resize);
+// Fixed native resolution — CSS scales canvas to fit any screen
+const GAME_W = 1183, GAME_H = 680;
+canvas.width  = GAME_W;
+canvas.height = GAME_H;
+resizeRenderer(canvas);
 
 initInput();
 initRenderer(canvas);
+
+// ─── Touch controls ───────────────────────────────────────────────────────────
+
+const touchControls = document.getElementById('touchControls')!;
+
+function initTouchControls(): void {
+  const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  if (!isTouch) return;
+  touchControls.classList.add('touch-visible');
+
+  function bindKey(id: string, code: string): void {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('touchstart', e => { e.preventDefault(); virtualKeyDown(code); }, { passive: false });
+    el.addEventListener('touchend',   e => { e.preventDefault(); virtualKeyUp(code); },   { passive: false });
+    el.addEventListener('touchcancel',e => { e.preventDefault(); virtualKeyUp(code); },   { passive: false });
+  }
+
+  bindKey('dUp',    'KeyW');
+  bindKey('dDown',  'KeyS');
+  bindKey('dLeft',  'KeyA');
+  bindKey('dRight', 'KeyD');
+  bindKey('dInteract', 'KeyE');
+
+  document.getElementById('dPause')?.addEventListener('touchstart', e => {
+    e.preventDefault();
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyP', bubbles: true }));
+  }, { passive: false });
+}
+
+initTouchControls();
 
 // ─── App state ────────────────────────────────────────────────────────────────
 
@@ -53,6 +82,7 @@ function focusMenuBtn(idx: number): void {
 function showMenu(): void {
   gs = null;
   menu.style.display = 'flex';
+  touchControls.classList.remove('game-active');
   updateMenuLeaderboard();
   setTimeout(() => focusMenuBtn(0), 0);
 }
@@ -109,6 +139,7 @@ function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFa
   isPaused = false;
   gs = createGame(n, carryScore, isCoop, smokerSlots, carryFailed, thresholdsUnlocked);
   menu.style.display = 'none';
+  touchControls.classList.add('game-active');
   lastTime = performance.now();
   requestAnimationFrame(loop);
 }

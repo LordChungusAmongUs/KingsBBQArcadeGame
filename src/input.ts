@@ -43,6 +43,22 @@ export function initInput(): void {
   });
 }
 
+export function virtualKeyDown(code: string): void {
+  if (keys.has(code)) return;
+  keys.add(code);
+  if (code === 'KeyE') { _interactDown = true; input.interactPressed = true; }
+  if (code === 'KeyW' || code === 'ArrowUp')    input.menuPickUp    = true;
+  if (code === 'KeyA' || code === 'ArrowLeft')  input.menuPickLeft  = true;
+  if (code === 'KeyD' || code === 'ArrowRight') input.menuPickRight = true;
+  if (code === 'KeyS' || code === 'ArrowDown')  input.menuPickDown  = true;
+  if (code === 'Space') input.p2InteractPressed = true;
+}
+
+export function virtualKeyUp(code: string): void {
+  keys.delete(code);
+  if (code === 'KeyE') _interactDown = false;
+}
+
 export function flushFrame(): void {
   input.interactPressed = false;
   input.restartPressed  = false;
