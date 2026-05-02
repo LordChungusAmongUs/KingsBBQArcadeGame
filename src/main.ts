@@ -113,6 +113,7 @@ let unsubInvites:    (() => void) | null = null;
 let unsubSentInvite: (() => void) | null = null;
 let pendingInviteId: string | null = null;      // invite I sent
 let pendingInviteLobbyId: string | null = null; // lobby I created for invite
+let pendingInviteToUid: string | null = null;   // uid of the player I invited
 let receivedInvites: InviteData[] = [];         // invites I received
 let onlineUsers: PresenceUser[] = [];
 
@@ -370,6 +371,7 @@ function closeLobbyScreen(): void {
     deleteLobby(pendingInviteLobbyId).catch(()=>{});
     pendingInviteLobbyId = null;
   }
+  pendingInviteToUid = null;
 }
 
 // Online users panel
@@ -380,13 +382,16 @@ function renderOnlineUsers(): void {
     el.innerHTML = '<div class="online-empty">no one else online</div>';
   } else {
     el.innerHTML = others.map(u => {
+      const isInvited = pendingInviteToUid === u.uid;
       const canInvite = !pendingInviteId;
       return `<div class="online-row">
         ${u.photo ? `<img class="online-photo" src="${u.photo}" />` : '<div class="online-photo-ph"></div>'}
         <span class="online-name">${escHtml(u.name)}</span>
-        ${canInvite
-          ? `<button class="invite-btn" data-uid="${u.uid}" data-name="${escHtml(u.name)}">INVITE</button>`
-          : pendingInviteId ? '<span class="invite-waiting">waiting...</span>' : ''}
+        ${isInvited
+          ? `<button class="cancel-invite-btn">CANCEL</button>`
+          : canInvite
+            ? `<button class="invite-btn" data-uid="${u.uid}" data-name="${escHtml(u.name)}">INVITE</button>`
+            : ''}
       </div>`;
     }).join('');
     el.querySelectorAll('.invite-btn').forEach(btn => {
@@ -396,6 +401,7 @@ function renderOnlineUsers(): void {
         handleSendInvite(uid, name);
       });
     });
+    el.querySelector('.cancel-invite-btn')?.addEventListener('click', handleCancelInvite);
   }
   // Also show ourselves
   if (user) {
@@ -436,20 +442,29 @@ async function handleGlobalSend(): Promise<void> {
 }
 
 // Invites
+async function handleCancelInvite(): Promise<void> {
+  unsubSentInvite?.(); unsubSentInvite = null;
+  if (pendingInviteId) { deleteInvite(pendingInviteId).catch(() => {}); pendingInviteId = null; }
+  if (pendingInviteLobbyId) { deleteLobby(pendingInviteLobbyId).catch(() => {}); pendingInviteLobbyId = null; }
+  pendingInviteToUid = null;
+  renderOnlineUsers();
+}
+
 async function handleSendInvite(toUid: string, toName: string): Promise<void> {
   if (!user || pendingInviteId) return;
   const lobbyId  = await createLobby(user.uid, user.displayName ?? 'Player', user.photoURL ?? '');
   const inviteId = await sendInvite(user.uid, user.displayName ?? 'Player', user.photoURL ?? '', toUid, lobbyId);
   pendingInviteId      = inviteId;
   pendingInviteLobbyId = lobbyId;
-  renderOnlineUsers(); // update buttons to show "waiting..."
+  pendingInviteToUid   = toUid;
+  renderOnlineUsers(); // update buttons to show CANCEL
 
   // Watch for response
   unsubSentInvite?.();
   unsubSentInvite = watchSentInvite(inviteId, invite => {
     if (!invite || invite.status === 'declined') {
       // Declined or deleted
-      pendingInviteId = null;
+      pendingInviteId = null; pendingInviteToUid = null;
       if (pendingInviteLobbyId) { deleteLobby(pendingInviteLobbyId).catch(()=>{}); pendingInviteLobbyId = null; }
       unsubSentInvite?.(); unsubSentInvite = null;
       renderOnlineUsers();
@@ -461,7 +476,7 @@ async function handleSendInvite(toUid: string, toName: string): Promise<void> {
       unsubHostLobby = watchLobby(invite.lobbyId, data => {
         if (data?.status === 'starting') {
           unsubHostLobby?.(); unsubHostLobby = null;
-          pendingInviteId = null; pendingInviteLobbyId = null;
+          pendingInviteId = null; pendingInviteLobbyId = null; pendingInviteToUid = null;
           startOnlineGame(invite.lobbyId, true);
         }
       });
