@@ -1,3 +1,4 @@
+import { initAudio, playMusic, stopMusic } from './audio';
 import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp, keys } from './input';
 import { createGame, tickGame, resolveCollisions } from './game';
 import { initRenderer, render, resizeRenderer, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu } from './renderer';
@@ -34,6 +35,7 @@ const menu   = document.getElementById('menu')!;
 const GAME_W = 1183, GAME_H = 680;
 canvas.width = GAME_W; canvas.height = GAME_H;
 resizeRenderer(canvas);
+initAudio();
 initInput();
 initRenderer(canvas);
 
@@ -213,6 +215,7 @@ function showMenu(): void {
   touchControls.classList.remove('game-active');
   updateMenuLeaderboard();
   setTimeout(() => focusMenuBtn(0), 0);
+  playMusic('/audio/theme.mp3');
 }
 
 function recordLevelStats(g: GameState): void {
@@ -370,6 +373,7 @@ function hideMobileNameEntry(): void {
 function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0): void {
   if (n === 1) {
     incrementStat(isCoop ? 'coop_sessions' : 'solo_sessions', 1);
+    stopMusic();
   }
   currentLevel = n; screen = 'game'; isPaused = false;
   gs = createGame(n, carryScore, isCoop, smokerSlots, carryFailed, thresholdsUnlocked);
