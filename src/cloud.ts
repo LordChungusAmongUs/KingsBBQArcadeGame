@@ -1,6 +1,6 @@
 import {
-  collection, addDoc, doc, getDoc, getDocs, updateDoc, deleteDoc,
-  query, orderBy, limit, onSnapshot, serverTimestamp,
+  collection, addDoc, doc, getDoc, updateDoc, deleteDoc,
+  query, orderBy, limit, where, onSnapshot, serverTimestamp,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -8,12 +8,8 @@ import { db } from './firebase';
 // ── Leaderboard ──────────────────────────────────────────────────────────────
 
 export interface CloudEntry {
-  uid: string;
-  displayName: string;
-  photoURL: string;
-  name: string;
-  score: number;
-  level: number;
+  uid: string; displayName: string; photoURL: string;
+  name: string; score: number; level: number;
 }
 
 export async function saveCloudScore(
@@ -25,22 +21,19 @@ export async function saveCloudScore(
   });
 }
 
+import { getDocs } from 'firebase/firestore';
 export async function loadCloudLeaderboard(): Promise<CloudEntry[]> {
   const q = query(collection(db, 'scores'), orderBy('score', 'desc'), limit(10));
   const snap = await getDocs(q);
   return snap.docs.map(d => d.data() as CloudEntry);
 }
 
-// ── Lobbies ──────────────────────────────────────────────────────────────────
+// ── Lobbies (game coordination) ───────────────────────────────────────────────
 
 export interface LobbyData {
   id: string;
-  hostUid: string;
-  hostName: string;
-  hostPhoto: string;
-  guestUid: string | null;
-  guestName: string | null;
-  guestPhoto: string | null;
+  hostUid: string; hostName: string; hostPhoto: string;
+  guestUid: string | null; guestName: string | null; guestPhoto: string | null;
   status: 'waiting' | 'starting' | 'closed';
 }
 
@@ -54,25 +47,13 @@ export async function createLobby(uid: string, name: string, photo: string): Pro
 }
 
 export async function joinLobby(lobbyId: string, uid: string, name: string, photo: string): Promise<boolean> {
-  const ref = doc(db, 'lobbies', lobbyId);
-  const snap = await getDoc(ref);
+  const r = doc(db, 'lobbies', lobbyId);
+  const snap = await getDoc(r);
   if (!snap.exists()) return false;
   const data = snap.data() as LobbyData;
   if (data.hostUid === uid || data.guestUid || data.status !== 'waiting') return false;
-  await updateDoc(ref, { guestUid: uid, guestName: name, guestPhoto: photo });
+  await updateDoc(r, { guestUid: uid, guestName: name, guestPhoto: photo });
   return true;
-}
-
-export async function leaveLobby(lobbyId: string, uid: string): Promise<void> {
-  const ref = doc(db, 'lobbies', lobbyId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return;
-  const data = snap.data() as LobbyData;
-  if (data.hostUid === uid) {
-    await deleteDoc(ref);
-  } else {
-    await updateDoc(ref, { guestUid: null, guestName: null, guestPhoto: null });
-  }
 }
 
 export async function deleteLobby(lobbyId: string): Promise<void> {
@@ -83,43 +64,68 @@ export async function setLobbyStatus(lobbyId: string, status: 'waiting' | 'start
   await updateDoc(doc(db, 'lobbies', lobbyId), { status });
 }
 
-export function watchLobbies(cb: (lobbies: LobbyData[]) => void): Unsubscribe {
-  const q = query(collection(db, 'lobbies'), orderBy('createdAt', 'desc'), limit(20));
-  return onSnapshot(q, snap => {
-    cb(snap.docs
-      .map(d => ({ id: d.id, ...d.data() } as LobbyData))
-      .filter(l => l.status !== 'closed'));
-  });
-}
-
 export function watchLobby(lobbyId: string, cb: (data: LobbyData | null) => void): Unsubscribe {
   return onSnapshot(doc(db, 'lobbies', lobbyId), snap => {
     cb(snap.exists() ? ({ id: snap.id, ...snap.data() } as LobbyData) : null);
   });
 }
 
-// ── Chat ─────────────────────────────────────────────────────────────────────
+// ── Global chat ───────────────────────────────────────────────────────────────
 
-export interface ChatMessage {
-  id: string;
-  uid: string;
-  name: string;
-  text: string;
+export interface GlobalChatMsg {
+  id: string; uid: string; name: string; photo: string; text: string;
 }
 
-export async function sendMessage(lobbyId: string, uid: string, name: string, text: string): Promise<void> {
-  await addDoc(collection(db, 'lobbies', lobbyId, 'messages'), {
-    uid, name, text, timestamp: serverTimestamp(),
+export async function sendGlobalMessage(uid: string, name: string, photo: string, text: string): Promise<void> {
+  await addDoc(collection(db, 'globalChat'), { uid, name, photo, text, timestamp: serverTimestamp() });
+}
+
+export function watchGlobalChat(cb: (msgs: GlobalChatMsg[]) => void): Unsubscribe {
+  const q = query(collection(db, 'globalChat'), orderBy('timestamp', 'desc'), limit(60));
+  return onSnapshot(q, snap => {
+    cb(snap.docs.reverse().map(d => ({ id: d.id, ...d.data() } as GlobalChatMsg)));
   });
 }
 
-export function watchMessages(lobbyId: string, cb: (msgs: ChatMessage[]) => void): Unsubscribe {
-  const q = query(
-    collection(db, 'lobbies', lobbyId, 'messages'),
-    orderBy('timestamp', 'asc'),
-    limit(50),
-  );
+// ── Invites ───────────────────────────────────────────────────────────────────
+
+export interface InviteData {
+  id: string;
+  fromUid: string; fromName: string; fromPhoto: string;
+  toUid: string;
+  lobbyId: string;
+  status: 'pending' | 'accepted' | 'declined';
+}
+
+export async function sendInvite(
+  fromUid: string, fromName: string, fromPhoto: string,
+  toUid: string, lobbyId: string,
+): Promise<string> {
+  const ref = await addDoc(collection(db, 'invites'), {
+    fromUid, fromName, fromPhoto, toUid, lobbyId,
+    status: 'pending', createdAt: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function respondToInvite(inviteId: string, status: 'accepted' | 'declined'): Promise<void> {
+  await updateDoc(doc(db, 'invites', inviteId), { status });
+}
+
+export async function deleteInvite(inviteId: string): Promise<void> {
+  await deleteDoc(doc(db, 'invites', inviteId)).catch(() => {});
+}
+
+export function watchIncomingInvites(toUid: string, cb: (invites: InviteData[]) => void): Unsubscribe {
+  const q = query(collection(db, 'invites'), where('toUid', '==', toUid));
   return onSnapshot(q, snap => {
-    cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)));
+    cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as InviteData))
+      .filter(i => i.status === 'pending'));
+  });
+}
+
+export function watchSentInvite(inviteId: string, cb: (invite: InviteData | null) => void): Unsubscribe {
+  return onSnapshot(doc(db, 'invites', inviteId), snap => {
+    cb(snap.exists() ? ({ id: snap.id, ...snap.data() } as InviteData) : null);
   });
 }
