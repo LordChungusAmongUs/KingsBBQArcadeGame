@@ -97,7 +97,10 @@ export function buildStations(): Station[] {
 
 // ─── Cooking tick ─────────────────────────────────────────────────────────────
 
-export function tickCooking(stations: Station[], dt: number): void {
+export function tickCooking(
+  stations: Station[], dt: number,
+  onSlotReady?: (food: FoodId, kind: Station['kind']) => void,
+): void {
   for (const s of stations) {
     if (s.kind !== 'grill' && s.kind !== 'fryer' && s.kind !== 'smoker') continue;
     for (const slot of s.slots) {
@@ -109,6 +112,7 @@ export function tickCooking(stations: Station[], dt: number): void {
       if (slot.state === 'cooking' && slot.timer >= def.cookTime) {
         slot.state = 'ready';
         slot.timer = 0;
+        onSlotReady?.(slot.food!, s.kind);
       } else if (slot.state === 'ready' && slot.timer >= def.burnTime) {
         slot.state = 'burned';
       }

@@ -64,6 +64,7 @@
       font-family: inherit; font-size: 0.7rem; cursor: pointer;
     }
     #signOutBtn:hover { background: #221; color: #f84; }
+    #userLevel { color: #fa4; font-size: 0.72rem; letter-spacing: 0.1em; margin-left: 0.1rem; }
 
     /* ── Recipe reference ──────────────────────────────────────────── */
     .menu-ref { margin-top: 1.2rem; width: 100%; max-width: 860px; }
@@ -238,6 +239,79 @@
     }
     #lobbySignIn:hover { background: #f842; color: #fff; }
 
+    /* ── XP bar in lobby ───────────────────────────────────────────── */
+    #selfXPBar { padding: 0.3rem 1rem 0.45rem; border-bottom: 1px solid #1a1208; flex-shrink: 0; }
+    #selfLevelLabel { font-size: 0.63rem; letter-spacing: 0.2em; color: #fa4; margin-bottom: 0.25rem; }
+    #selfXPBarInner { height: 5px; background: #1a1208; border-radius: 3px; overflow: hidden; }
+    #selfXPFill { height: 100%; background: linear-gradient(90deg,#f84,#fa4); border-radius: 3px; transition: width 0.4s; }
+
+    /* ── Achievements overlay ───────────────────────────────────────── */
+    #achievementsOverlay {
+      display: none; position: absolute; inset: 0; z-index: 25;
+      background: rgba(8,6,4,0.96); flex-direction: column;
+    }
+    .ach-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.7rem 1.2rem; border-bottom: 1px solid #2a1e10; flex-shrink: 0;
+    }
+    .ach-header span { color: #fa4; font-size: 1rem; letter-spacing: 0.25em; }
+    #achievementsClose {
+      background: transparent; border: 1px solid #554; color: #998;
+      font-family: inherit; font-size: 1rem; cursor: pointer; padding: 0.2rem 0.6rem;
+    }
+    #achievementsClose:hover { background: #221; color: #f84; }
+    #achievementsList { flex: 1; overflow-y: auto; padding: 0.5rem 1rem; }
+    .ach-row {
+      display: flex; align-items: center; gap: 0.6rem;
+      padding: 0.4rem 0.5rem; border-bottom: 1px solid #1a1208; font-size: 0.78rem;
+    }
+    .ach-name  { color: #998; width: 140px; flex-shrink: 0; }
+    .ach-row.ach-has .ach-name { color: #fa4; }
+    .ach-stat  { color: #665; width: 80px; text-align: right; flex-shrink: 0; font-size: 0.72rem; }
+    .ach-tiers { display: flex; gap: 4px; flex-wrap: wrap; }
+    .ach-tier  { padding: 1px 5px; border: 1px solid #2a1e10; border-radius: 2px; font-size: 0.65rem; color: #443; }
+    .ach-tier.unlocked { border-color: #fa4; color: #fa4; }
+
+    /* Achievements button */
+    #lobbyAchievements {
+      padding: 0.45rem 1rem; font-family: inherit; font-size: 0.82rem;
+      letter-spacing: 0.15em; cursor: pointer; border: 1px solid #fa4; color: #fa4;
+      background: transparent; transition: background 0.15s;
+    }
+    #lobbyAchievements:hover { background: #fa42; }
+
+    /* ── Achievement toast ──────────────────────────────────────────── */
+    #achievementToast {
+      position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 50;
+      background: #1a1208; border: 1px solid #fa4; border-left: 4px solid #fa4;
+      padding: 0.7rem 1.1rem; max-width: 300px; pointer-events: none;
+      opacity: 0; transform: translateX(20px);
+      transition: opacity 0.3s, transform 0.3s;
+    }
+    #achievementToast.toast-show { opacity: 1; transform: translateX(0); }
+    #toastTitle { font-size: 0.68rem; letter-spacing: 0.25em; color: #fa4; margin-bottom: 0.2rem; }
+    #toastSub   { font-size: 0.82rem; color: #cca; }
+
+    /* ── Mobile name entry overlay ──────────────────────────────────── */
+    #nameEntryMobile {
+      display: none; position: fixed; inset: 0; z-index: 40;
+      background: rgba(10,8,4,0.92); flex-direction: column;
+      align-items: center; justify-content: center; gap: 1rem;
+    }
+    #nameEntryMobile h3 { font-size: 1rem; letter-spacing: 0.3em; color: #f84; }
+    #neScore { font-size: 0.85rem; color: #cca; letter-spacing: 0.15em; }
+    #neInput {
+      font-family: 'Courier New', monospace; font-size: 2rem; letter-spacing: 0.4em;
+      background: #0f0a04; border: 2px solid #f84; color: #f84;
+      padding: 0.5rem 1rem; text-align: center; text-transform: uppercase;
+      width: 200px; outline: none;
+    }
+    #neSubmit {
+      padding: 0.7rem 2rem; border: 2px solid #4af; color: #4af; background: transparent;
+      font-family: inherit; font-size: 1rem; letter-spacing: 0.25em; cursor: pointer;
+    }
+    #neSubmit:hover, #neSubmit:active { background: #4af3; color: #fff; }
+
     /* ── Touch controls ─────────────────────────────────────────────── */
     #touchControls {
       display: none; position: fixed; bottom: 0; left: 0; right: 0;
@@ -322,6 +396,7 @@
         <div id="authIn" style="display:none">
           <img id="userPhoto" src="" />
           <span id="userName"></span>
+          <span id="userLevel"></span>
           <button id="signOutBtn">SIGN OUT</button>
         </div>
       </div>
@@ -391,6 +466,7 @@
         <div id="lobbyActions">
           <button id="lobbyPlaySolo">▶ 1 PLAYER</button>
           <button id="lobbyPlayCoop">🤝 FIND CO-OP MATCH</button>
+          <button id="lobbyAchievements">🏆 ACHIEVEMENTS</button>
         </div>
         <div id="matchmakingStatus">
           <span id="matchmakingText">SEARCHING FOR OPPONENT<span id="matchmakingDots">...</span></span>
@@ -407,6 +483,10 @@
             <span class="online-self-name" id="onlineSelfName"></span>
             <span class="online-self-badge">YOU</span>
           </div>
+          <div id="selfXPBar" style="display:none">
+            <div id="selfLevelLabel"></div>
+            <div id="selfXPBarInner"><div id="selfXPFill" style="width:0%"></div></div>
+          </div>
           <div id="onlineList"><div class="online-empty">loading...</div></div>
         </div>
         <div id="lobbyRight">
@@ -417,6 +497,15 @@
             <button id="globalChatSend">SEND</button>
           </div>
         </div>
+      </div>
+
+      <!-- Achievements overlay -->
+      <div id="achievementsOverlay">
+        <div class="ach-header">
+          <span>🏆 ACHIEVEMENTS</span>
+          <button id="achievementsClose">✕ CLOSE</button>
+        </div>
+        <div id="achievementsList"></div>
       </div>
 
       <!-- Auth required overlay -->
@@ -438,6 +527,20 @@
         <button id="dPause">⏸</button>
         <button id="dInteract">ACT</button>
       </div>
+    </div>
+
+    <!-- ── Achievement toast ─────────────────────────────────────────── -->
+    <div id="achievementToast">
+      <div id="toastTitle"></div>
+      <div id="toastSub"></div>
+    </div>
+
+    <!-- ── Mobile name entry ──────────────────────────────────────────── -->
+    <div id="nameEntryMobile">
+      <h3>ENTER YOUR NAME</h3>
+      <div id="neScore"></div>
+      <input id="neInput" type="text" maxlength="3" autocomplete="off" spellcheck="false" placeholder="AAA" />
+      <button id="neSubmit">CONFIRM</button>
     </div>
 
     <!-- ── Portrait rotation blocker ────────────────────────────────── -->

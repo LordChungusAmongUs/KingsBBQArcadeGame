@@ -2,6 +2,26 @@ import type { GameState, Order, FoodId, HeldItem, StagedItem, CookSlot } from '.
 import { LEVELS, ORDERS, FOOD, MEAL_PRICES, INTERACT_RANGE, PLAYER_SPEED, PARTIAL_SPOIL_TIME, STAGED_SPOIL_TIME, LABOR_RATE, OVERTIME_LABOR_RATE, OVERHEAD_COST, BASE_MAX_FAILS, UPSET_THRESHOLDS, ORDER_DEFS } from './config';
 import { buildStations, tickCooking, nearestStation, distToStation, placeOnStation, pickupFromStation } from './kitchen';
 import { input, keys } from './input';
+import { awardXP, incrementStat } from './profile';
+
+const MEAL_STAT_MAP: Record<string, string> = {
+  'Hamburger':        'sold_hamburger',
+  'Cheeseburger':     'sold_cheeseburger',
+  'Dbl Burger':       'sold_dbl_burger',
+  'Dbl Cheeseburger': 'sold_dbl_cheeseburger',
+  'BBQ Sand.':        'sold_bbq_sand',
+  'BBQ Plate':        'sold_bbq_plate',
+  'Hotdog':           'sold_hotdog',
+};
+
+function onCookingDone(food: FoodId, kind: string): void {
+  awardXP(1);
+  if (food === 'raw_patty')  incrementStat('patties_grilled', 1);
+  else if (food === 'raw_hotdog') incrementStat('hotdogs_grilled', 1);
+  else if (food === 'raw_fries')  incrementStat('fries_fried', 1);
+  else if (food === 'raw_rings')  incrementStat('pups_fried', 1);
+  else if (food === 'raw_pork' && kind === 'smoker') incrementStat('shoulders_smoked', 1);
+}
 
 const MAX_STACK = 2;
 let _orderId = 1;
@@ -55,7 +75,7 @@ export function tickGame(gs: GameState, dt: number): void {
   if (gs.prepTimer > 0) {
     gs.prepTimer = Math.max(0, gs.prepTimer - dt);
     drainLabor(gs, dt, LABOR_RATE);
-    tickCooking(gs.stations, dt);
+    tickCooking(gs.stations, dt, onCookingDone);
     tickSmoker(gs);
     tickChop(gs, dt);
     tickStaged(gs, dt);
@@ -104,7 +124,7 @@ export function tickGame(gs: GameState, dt: number): void {
 
   tickOrders(gs, dt);
   tickStaged(gs, dt);
-  tickCooking(gs.stations, dt);
+  tickCooking(gs.stations, dt, onCookingDone);
   tickSmoker(gs);
   tickChop(gs, dt);
   tickMenu(gs);
@@ -156,6 +176,7 @@ function tickOrders(gs: GameState, dt: number): void {
     if (o.elapsed >= o.timeLimit) {
       o.status = 'failed';
       gs.failed++;
+      incrementStat('customers_lost', 1);
       if (gs.failed >= gs.maxFails) { gs.phase = 'game_over'; gs.levelEndTimer = 4000; }
     }
   }
@@ -267,6 +288,7 @@ function tickStaged(gs: GameState, dt: number): void {
           if (o.items.every(i => i.done)) {
             o.status = 'plating';
             gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
+            awardXP(1); incrementStat('plates_completed', 1);
           }
         }
         continue;
@@ -282,6 +304,7 @@ function tickStaged(gs: GameState, dt: number): void {
         if (o.items.every(i => i.done)) {
           o.status = 'plating';
           gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
+          awardXP(1); incrementStat('plates_completed', 1);
         }
       }
     }
@@ -307,6 +330,7 @@ function tickChop(gs: GameState, dt: number): void {
       gs.chopStored--;
       gs.chopOutput += 4;
       gs.chopProgress = 0;
+      awardXP(1); incrementStat('bbq_chops', 1);
     }
   }
 }
@@ -446,6 +470,7 @@ function doInteract(gs: GameState, playerNum: 1 | 2 = 1): void {
   if (s.kind === 'trash') {
     if (p.held?.burned) {
       gs.levelWaste += getIngredientCost(p.held.food) * p.held.count;
+      incrementStat('food_burned', p.held.count);
     }
     p.held = null;
     return;
@@ -466,6 +491,7 @@ function doInteract(gs: GameState, playerNum: 1 | 2 = 1): void {
           readyPatties[i].food = null; readyPatties[i].state = 'empty'; readyPatties[i].timer = 0;
         }
         p.held = { food: 'cheese_patty', count: converts, burned: false };
+        awardXP(converts); incrementStat('cheese_melted', converts);
       }
       return;
     }
@@ -475,6 +501,8 @@ function doInteract(gs: GameState, playerNum: 1 | 2 = 1): void {
       if (placeOnStation(s, p.held.food)) {
         const cost = def.cost ?? 0;
         gs.score -= cost; gs.levelCOGS += cost;
+        if (s.kind === 'grill')  incrementStat('grill_uses', 1);
+        if (s.kind === 'fryer')  incrementStat('fryer_uses', 1);
         if (p.held.food === 'raw_pork' && s.kind === 'smoker') {
           const newSlot = s.slots.find(sl => sl.food === 'raw_pork' && sl.state === 'cooking' && sl.smokerPlacedLevel === undefined);
           if (newSlot) {
@@ -577,6 +605,7 @@ function doInteract(gs: GameState, playerNum: 1 | 2 = 1): void {
           if (o.items.every(i => i.done)) {
             o.status = 'plating';
             gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
+            awardXP(1); incrementStat('plates_completed', 1);
           }
           return;
         }
@@ -605,6 +634,11 @@ function doInteract(gs: GameState, playerNum: 1 | 2 = 1): void {
         checkThresholds(gs);
         gs.completed++;
         order.status = 'failed'; // remove from ticket board
+        awardXP(1);
+        const [base] = order.name.split('+');
+        const mealStat = MEAL_STAT_MAP[base.trim()];
+        if (mealStat) incrementStat(mealStat, 1);
+        if (order.name.includes('+')) incrementStat('sold_combo', 1);
       }
       p.held = null;
     }

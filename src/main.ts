@@ -7,6 +7,13 @@ import { loadLeaderboard, saveEntry, type LeaderboardEntry } from './leaderboard
 import { initAuth, signInWithGoogle, signOutUser } from './auth';
 import type { User } from 'firebase/auth';
 import {
+  loadProfile, clearProfile, flushSession, getProfile,
+  setOnLevelUp, setOnAchievementUnlocked,
+  incrementStat, recordMaxStat,
+  xpProgress, ACHIEVEMENTS,
+  type UserProfile,
+} from './profile';
+import {
   saveCloudScore, loadCloudLeaderboard,
   createLobby, joinLobby, deleteLobby, setLobbyStatus, watchLobby,
   sendGlobalMessage, watchGlobalChat, type GlobalChatMsg,
@@ -59,7 +66,12 @@ let user: User | null = null;
 
 initAuth(u => {
   user = u;
-  updateAuthUI();
+  if (u) {
+    loadProfile(u.uid).then(() => updateAuthUI()).catch(console.error);
+  } else {
+    clearProfile();
+    updateAuthUI();
+  }
   updateMenuLeaderboard();
 });
 
@@ -71,13 +83,52 @@ function updateAuthUI(): void {
     const photo = document.getElementById('userPhoto') as HTMLImageElement;
     photo.src = user.photoURL ?? ''; photo.style.display = user.photoURL ? 'block' : 'none';
     document.getElementById('userName')!.textContent = user.displayName ?? user.email ?? '';
+    const prof = getProfile();
+    const lvlEl = document.getElementById('userLevel')!;
+    lvlEl.textContent = prof ? (prof.level >= 20 ? 'Lv MAX' : `Lv ${prof.level}`) : '';
   } else {
     authOut.style.display = 'flex'; authIn.style.display = 'none';
+    document.getElementById('userLevel')!.textContent = '';
   }
 }
 
 document.getElementById('signInBtn')!.addEventListener('click', () => signInWithGoogle().catch(console.error));
 document.getElementById('signOutBtn')!.addEventListener('click', () => signOutUser().catch(console.error));
+
+// ─── Toast system ─────────────────────────────────────────────────────────────
+
+const toastQueue: { title: string; sub: string }[] = [];
+let toastActive = false;
+
+function showToast(title: string, sub: string): void {
+  toastQueue.push({ title, sub });
+  if (!toastActive) _nextToast();
+}
+
+function _nextToast(): void {
+  if (toastQueue.length === 0) { toastActive = false; return; }
+  toastActive = true;
+  const { title, sub } = toastQueue.shift()!;
+  const el = document.getElementById('achievementToast')!;
+  document.getElementById('toastTitle')!.textContent = title;
+  document.getElementById('toastSub')!.textContent   = sub;
+  el.classList.add('toast-show');
+  setTimeout(() => {
+    el.classList.remove('toast-show');
+    setTimeout(_nextToast, 400);
+  }, 3200);
+}
+
+setOnLevelUp((oldLv, newLv) => {
+  showToast('LEVEL UP!', `You are now Level ${newLv >= 20 ? 'MAX' : newLv}`);
+  updateAuthUI();
+  updateLobbyXPBar();
+});
+
+setOnAchievementUnlocked((id, tier, name) => {
+  const TIER_LABELS = ['I','II','III','IV','V','VI','VII','VIII','IX','X'];
+  showToast('ACHIEVEMENT UNLOCKED', `${name} — Tier ${TIER_LABELS[tier] ?? tier + 1}`);
+});
 
 // ─── Game state ───────────────────────────────────────────────────────────────
 
@@ -148,6 +199,29 @@ function showMenu(): void {
   setTimeout(() => focusMenuBtn(0), 0);
 }
 
+function recordLevelStats(g: GameState): void {
+  incrementStat('total_sales',     g.levelSales);
+  incrementStat('total_food_cost', g.levelCOGS);
+  incrementStat('total_labor',     g.levelLabor);
+  incrementStat('total_waste',     g.levelWaste);
+  const profit = Math.max(0, g.levelSales - g.levelCOGS - g.levelLabor - g.levelWaste);
+  incrementStat('total_profit', profit);
+  recordMaxStat('max_stage', g.level);
+}
+
+function updateLobbyXPBar(): void {
+  const prof = getProfile();
+  const barEl  = document.getElementById('selfXPBar');
+  const lblEl  = document.getElementById('selfLevelLabel');
+  const fillEl = document.getElementById('selfXPFill');
+  if (!barEl || !lblEl || !fillEl) return;
+  if (!prof) { barEl.style.display = 'none'; return; }
+  barEl.style.display = 'block';
+  const { current, needed, level } = xpProgress(prof.xp);
+  lblEl.textContent = level >= 20 ? 'LEVEL MAX' : `LEVEL ${level}`;
+  fillEl.style.width = level >= 20 ? '100%' : `${Math.round((current / needed) * 100)}%`;
+}
+
 // ─── Leaderboard ──────────────────────────────────────────────────────────────
 
 async function updateMenuLeaderboard(): Promise<void> {
@@ -185,9 +259,17 @@ async function updateMenuLeaderboard(): Promise<void> {
 
 function goToNameEntry(g: GameState): void {
   if (isOnlineGame && isOnlineHost) cleanupOnlineGame();
+  recordLevelStats(g);
+  flushSession().catch(console.error);
   lastGameScore = g.score; lastGameLevel = g.level;
   nameChars = ['A','A','A']; nameCursor = 0;
   screen = 'name_entry';
+  // Pre-fill from Google display name if available
+  if (user?.displayName) {
+    const initials = user.displayName.slice(0, 3).toUpperCase().replace(/[^A-Z ]/g, 'A');
+    for (let i = 0; i < 3; i++) nameChars[i] = CHARS.includes(initials[i]) ? initials[i] : 'A';
+  }
+  showMobileNameEntry();
 }
 
 function handleNameEntry(): void {
@@ -195,17 +277,39 @@ function handleNameEntry(): void {
   if (input.menuPickDown || input.p2MenuPickDown) { const i = CHARS.indexOf(nameChars[nameCursor]); nameChars[nameCursor] = CHARS[(i-1+CHARS.length)%CHARS.length]; }
   if ((input.menuPickRight||input.p2MenuPickRight) && nameCursor < 2) nameCursor++;
   if ((input.menuPickLeft ||input.p2MenuPickLeft)  && nameCursor > 0) nameCursor--;
-  if (input.interactPressed || input.p2InteractPressed) {
-    const name = nameChars.join('').trim() || 'AAA';
-    leaderboardEntries = saveEntry(name, lastGameScore, lastGameLevel);
-    if (user) saveCloudScore(user.uid, user.displayName??'', user.photoURL??'', name, lastGameScore, lastGameLevel).catch(()=>{});
-    screen = 'leaderboard';
-  }
+  if (input.interactPressed || input.p2InteractPressed) submitName();
+}
+
+function submitName(): void {
+  const name = nameChars.join('').trim() || 'AAA';
+  hideMobileNameEntry();
+  leaderboardEntries = saveEntry(name, lastGameScore, lastGameLevel);
+  if (user) saveCloudScore(user.uid, user.displayName??'', user.photoURL??'', name, lastGameScore, lastGameLevel).catch(()=>{});
+  screen = 'leaderboard';
+}
+
+function showMobileNameEntry(): void {
+  const el = document.getElementById('nameEntryMobile')!;
+  if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0) return;
+  const inp = document.getElementById('neInput') as HTMLInputElement;
+  inp.value = nameChars.join('').trim();
+  const scoreEl = document.getElementById('neScore')!;
+  const sign = lastGameScore < 0 ? '-' : '';
+  scoreEl.textContent = `SCORE: ${sign}$${(Math.abs(lastGameScore)/100).toFixed(2)}`;
+  el.style.display = 'flex';
+  setTimeout(() => inp.focus(), 50);
+}
+
+function hideMobileNameEntry(): void {
+  document.getElementById('nameEntryMobile')!.style.display = 'none';
 }
 
 // ─── Level management ─────────────────────────────────────────────────────────
 
 function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0): void {
+  if (n === 1) {
+    incrementStat(isCoop ? 'coop_sessions' : 'solo_sessions', 1);
+  }
   currentLevel = n; screen = 'game'; isPaused = false;
   gs = createGame(n, carryScore, isCoop, smokerSlots, carryFailed, thresholdsUnlocked);
   menu.style.display = 'none';
@@ -263,6 +367,7 @@ function startOnlineGame(lobbyId: string, asHost: boolean): void {
     startHostSync(lobbyId, () => gs, handleP2FromNet);
     startLevel(1, STARTING_MONEY);
   } else {
+    incrementStat('coop_sessions', 1);
     guestInteractSeq = 0; lastSentInput = null;
     p2PredX = null; p2PredY = null;
     menu.style.display = 'none';
@@ -423,6 +528,7 @@ function loop(now: number): void {
   tickGame(gs, dt);
   if (gs.phase === 'level_end' && (gs.levelEndTimer <= 0 || input.p2InteractPressed || input.interactPressed)) {
     if (gs.level < LEVELS.length) {
+      recordLevelStats(gs);
       const smoker = gs.stations.find(s => s.kind === 'smoker');
       startLevel(gs.level+1, gs.score, smoker?.slots.map(sl=>({...sl})), Math.max(0,gs.failed-1), gs.thresholdsUnlocked);
       return;
@@ -440,6 +546,51 @@ function loop(now: number): void {
 
 const lobbyScreen = document.getElementById('lobbyScreen')!;
 
+// Mobile name entry submit
+document.getElementById('neSubmit')?.addEventListener('click', () => {
+  const inp = document.getElementById('neInput') as HTMLInputElement;
+  const raw = inp.value.toUpperCase().replace(/[^A-Z ]/g, '').slice(0, 3).padEnd(3, 'A');
+  for (let i = 0; i < 3; i++) nameChars[i] = raw[i] ?? 'A';
+  submitName();
+});
+document.getElementById('neInput')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('neSubmit')?.click();
+});
+
+// Achievements overlay
+function openAchievementsOverlay(): void {
+  const overlay = document.getElementById('achievementsOverlay')!;
+  const list    = document.getElementById('achievementsList')!;
+  const prof    = getProfile();
+  list.innerHTML = ACHIEVEMENTS.map(ach => {
+    const cur   = prof?.achievements[ach.id] ?? -1;
+    const stat  = prof?.stats[ach.stat] ?? 0;
+    const ROMAN = ['I','II','III','IV','V','VI','VII','VIII','IX','X'];
+    const tiers = ach.tiers.map((t, i) => {
+      const unlocked = i <= cur;
+      const cls = unlocked ? 'ach-tier unlocked' : 'ach-tier';
+      const label = t >= 100000 ? `$${(t/100).toLocaleString()}` : t.toLocaleString();
+      return `<span class="${cls}" title="Tier ${ROMAN[i]}: ${label}">${ROMAN[i] ?? i+1}</span>`;
+    }).join('');
+    const statDisp = ach.stat.startsWith('total_') || ach.stat === 'total_profit'
+      ? `$${(stat/100).toLocaleString()}`
+      : stat.toLocaleString();
+    return `<div class="ach-row ${cur >= 0 ? 'ach-has' : ''}">
+      <div class="ach-name">${ach.name}</div>
+      <div class="ach-stat">${statDisp}</div>
+      <div class="ach-tiers">${tiers}</div>
+    </div>`;
+  }).join('');
+  overlay.style.display = 'flex';
+}
+
+function closeAchievementsOverlay(): void {
+  document.getElementById('achievementsOverlay')!.style.display = 'none';
+}
+
+document.getElementById('achievementsClose')?.addEventListener('click', closeAchievementsOverlay);
+document.getElementById('lobbyAchievements')?.addEventListener('click', openAchievementsOverlay);
+
 function openLobbyScreen(): void {
   menu.style.display = 'none';
   lobbyScreen.style.display = 'flex';
@@ -456,6 +607,7 @@ function openLobbyScreen(): void {
   document.getElementById('lobbyContent')!.style.display      = 'flex';
   renderMatchmakingUI();
 
+  updateLobbyXPBar();
   setPresence(user.uid, user.displayName ?? 'Player', user.photoURL ?? '');
   unsubPresence   = watchPresence(users => { onlineUsers = users; renderOnlineUsers(); });
   unsubGlobalChat = watchGlobalChat(renderGlobalChat);
