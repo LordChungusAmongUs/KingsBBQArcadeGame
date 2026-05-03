@@ -213,7 +213,7 @@ let onlineUsers: PresenceUser[] = [];
 
 // ─── Menu helpers ─────────────────────────────────────────────────────────────
 
-const menuBtns = ['startBtn','coopBtn','lobbyBtn','fsBtn'].map(id => document.getElementById(id) as HTMLButtonElement);
+const menuBtns = ['startBtn','coopBtn','lobbyBtn'].map(id => document.getElementById(id) as HTMLButtonElement);
 let menuFocusIdx = 0;
 
 function focusMenuBtn(idx: number): void {
@@ -977,7 +977,6 @@ function toggleFullscreen(): void {
   if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
   else document.exitFullscreen().catch(()=>{});
 }
-document.getElementById('fsBtn')!.addEventListener('click', toggleFullscreen);
 
 window.addEventListener('keydown', e => {
   if (e.repeat) return;
