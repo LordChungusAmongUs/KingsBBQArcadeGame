@@ -999,11 +999,11 @@ menu.style.display = 'none';
 function dismissSplash(): void {
   if (splashEl.style.display === 'none') return;
   splashEl.style.display = 'none';
-  enterFullscreenLandscape();
-  showMenu();
+  showMenu(); // showMenu() handles fullscreen + landscape
 }
 
-splashEl.addEventListener('click',      dismissSplash);
-splashEl.addEventListener('touchstart', dismissSplash);
+splashEl.addEventListener('click', dismissSplash);
+// Use touchend + preventDefault to avoid tap-through onto menu buttons below
+splashEl.addEventListener('touchend', (e) => { e.preventDefault(); dismissSplash(); });
 
 playMusic('/audio/theme.mp3');
