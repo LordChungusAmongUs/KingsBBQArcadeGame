@@ -22,7 +22,7 @@ export function initAuth(onChange: (u: User | null) => void): void {
 
 export function signInWithGoogle(): Promise<void> {
   if (needsRedirect()) {
-    sessionStorage.setItem('kbbq_pendingLobby', '1');
+    localStorage.setItem('kbbq_pendingLobby', '1');
     return signInWithRedirect(auth, provider);
   }
   return signInWithPopup(auth, provider).then(() => {});

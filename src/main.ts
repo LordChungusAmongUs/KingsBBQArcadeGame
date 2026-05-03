@@ -82,8 +82,15 @@ initAuth(u => {
   if (u) {
     loadProfile(u.uid).then(() => {
       updateAuthUI();
-      if (sessionStorage.getItem('kbbq_pendingLobby')) {
-        sessionStorage.removeItem('kbbq_pendingLobby');
+      // Use localStorage (not sessionStorage) — iOS Safari clears sessionStorage
+      // during cross-origin redirect navigation, losing the pending-lobby flag.
+      const pendingLobby = localStorage.getItem('kbbq_pendingLobby');
+      if (pendingLobby) {
+        localStorage.removeItem('kbbq_pendingLobby');
+        openLobbyScreen();
+      } else if (lobbyScreen.style.display !== 'none') {
+        // Auth resolved after the user already opened the lobby — re-init so
+        // presence, chat, and toolbar all load correctly.
         openLobbyScreen();
       }
     }).catch(console.error);
