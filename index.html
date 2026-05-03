@@ -284,6 +284,18 @@
     .ach-bar-fill { height: 100%; background: linear-gradient(90deg,#f84,#fa4); border-radius: 2px; }
     .ach-progress-text { font-size: 0.6rem; color: #665; white-space: nowrap; flex-shrink: 0; }
 
+    /* Shop button (coming soon) */
+    #lobbyShop {
+      padding: 0.45rem 1rem; font-family: inherit; font-size: 0.82rem;
+      letter-spacing: 0.15em; border: 1px solid #444; color: #555;
+      background: transparent; cursor: not-allowed; position: relative;
+    }
+    #lobbyShop::after {
+      content: 'COMING SOON'; position: absolute; top: -8px; right: -4px;
+      font-size: 0.45rem; letter-spacing: 0.1em; color: #fa4;
+      background: #1a0c04; padding: 1px 4px; border: 1px solid #fa4; border-radius: 2px;
+    }
+
     /* Achievements button */
     #lobbyAchievements {
       padding: 0.45rem 1rem; font-family: inherit; font-size: 0.82rem;
@@ -483,6 +495,7 @@
           <button id="lobbyPlaySolo">▶ 1 PLAYER</button>
           <button id="lobbyPlayCoop">🤝 FIND CO-OP MATCH</button>
           <button id="lobbyAchievements">🏆 ACHIEVEMENTS</button>
+          <button id="lobbyShop" disabled>🛒 SHOP</button>
         </div>
         <div id="matchmakingStatus">
           <span id="matchmakingText">SEARCHING FOR OPPONENT<span id="matchmakingDots">...</span></span>
