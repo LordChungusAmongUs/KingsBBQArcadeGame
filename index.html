@@ -26,9 +26,10 @@
     #menu {
       position: absolute; inset: 0; display: flex; flex-direction: column;
       align-items: center; justify-content: flex-start;
-      background: linear-gradient(160deg, rgba(26,12,4,0.72), rgba(10,8,4,0.72)),
+      background: linear-gradient(160deg, rgba(26,12,4,0.55), rgba(10,8,4,0.55)),
                   url('/images/splash.png') center/cover no-repeat; z-index: 10;
       overflow-y: auto; padding: 1rem 1rem 2rem;
+      justify-content: center;
     }
     #menuTitle { font-size: 3rem; letter-spacing: 0.15em; color: #f84; margin-bottom: 0.2em; text-shadow: 0 0 40px #f842; text-align: center; }
     #menu h2 { font-size: 1rem; letter-spacing: 0.3em; color: #986; margin-bottom: 0.4em; }
@@ -435,12 +436,8 @@
 
     <!-- ── Main menu ───────────────────────────────────────────────── -->
     <div id="menu">
-      <div id="menuTitle">👑 KINGS BBQ BONANZA</div>
-      <h2>BBQ RESTAURANT SIMULATOR</h2>
-      <p>Run a fast-food BBQ kitchen. Take orders, fire up the grill, deep fryer, and smoker — prep plates and get them out the window before the customers rage-quit.</p>
-
-      <!-- Auth -->
-      <div id="authSection">
+      <!-- Hidden auth elements required by JS -->
+      <div id="authSection" style="display:none">
         <div id="authOut">
           <button id="signInBtn">SIGN IN WITH GOOGLE</button>
         </div>
@@ -451,50 +448,16 @@
           <button id="signOutBtn">SIGN OUT</button>
         </div>
       </div>
+      <!-- Hidden high scores list required by JS -->
+      <div id="hiscores" style="display:none">
+        <div id="hiscores-list"></div>
+      </div>
 
       <div class="menuBtns">
         <button id="startBtn">1 PLAYER</button>
         <button id="coopBtn">2 PLAYERS</button>
         <button id="lobbyBtn">🌐 PRO</button>
         <button id="fsBtn">⛶ FULLSCREEN</button>
-      </div>
-      <div class="controls">
-        P1: WASD — move &nbsp;|&nbsp; E — interact<br>
-        P2: ARROW KEYS — move &nbsp;|&nbsp; SPACE — interact<br>
-        R — menu &nbsp;|&nbsp; P — pause &nbsp;|&nbsp; F — fullscreen
-      </div>
-
-      <div class="menu-ref">
-        <h3>MENU &amp; INGREDIENTS</h3>
-        <div class="recipe-grid">
-          <div class="recipe-col">
-            <div class="recipe-col-header">🔥 GRILL</div>
-            <div class="recipe-item"><span class="abbr">HMB</span> — 1× Patty (15s)</div>
-            <div class="recipe-item"><span class="abbr">CHZ BRGR</span> — Patty + Cheese</div>
-            <div class="recipe-item"><span class="abbr">DBL HMB</span> — 2× Patty</div>
-            <div class="recipe-item"><span class="abbr">DBL CHZ BRGR</span> — 2× Cheese Patty</div>
-            <div class="recipe-item"><span class="abbr">HOT DOG</span> — 1× Hot Dog (7.5s)</div>
-          </div>
-          <div class="recipe-col">
-            <div class="recipe-col-header">🍟 FRYER</div>
-            <div class="recipe-item"><span class="abbr">SM FF</span> — 1× Fries (7.5s)</div>
-            <div class="recipe-item"><span class="abbr">LG FF</span> — 2× Fries</div>
-            <div class="recipe-item"><span class="abbr">SM PUPS</span> — 1× Pups (5s)</div>
-            <div class="recipe-item"><span class="abbr">LG PUPS</span> — 2× Pups</div>
-          </div>
-          <div class="recipe-col">
-            <div class="recipe-col-header">💨 SMOKER</div>
-            <div class="recipe-item"><span class="abbr">BBQ SAND</span> — 1× Pulled Pork</div>
-            <div class="recipe-item"><span class="abbr">BBQ PLATE</span> — 2× Pork + FF + PUPS</div>
-            <div class="recipe-item" style="color:#443;margin-top:0.4rem">Raw Pork → Smoker → Chop → 4× Pork</div>
-          </div>
-        </div>
-        <div class="recipe-note">Tickets show abbreviated names — memorize before service</div>
-      </div>
-
-      <div id="hiscores">
-        <h3>— HIGH SCORES —</h3>
-        <div id="hiscores-list"><div class="hs-empty">loading...</div></div>
       </div>
     </div>
 
