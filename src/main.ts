@@ -5,6 +5,8 @@ const GAME_TRACKS = [
   '/audio/game1.mp3',
   '/audio/game2.mp3',
   '/audio/game3.mp3',
+  '/audio/game4.mp3',
+  '/audio/game5.mp3',
 ];
 import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp, keys } from './input';
 import { createGame, tickGame, resolveCollisions } from './game';
