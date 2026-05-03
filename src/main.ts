@@ -88,9 +88,9 @@ initAuth(u => {
       if (pendingLobby) {
         localStorage.removeItem('kbbq_pendingLobby');
         openLobbyScreen();
-      } else if (lobbyScreen.style.display !== 'none') {
-        // Auth resolved after the user already opened the lobby — re-init so
-        // presence, chat, and toolbar all load correctly.
+      } else if (lobbyScreen.style.display !== 'none' && !unsubPresence) {
+        // Auth resolved after the user already opened the lobby (race on slow
+        // iOS connections) — re-init now that we have a valid user.
         openLobbyScreen();
       }
     }).catch(console.error);
@@ -946,6 +946,12 @@ function escHtml(s: string): string {
 document.getElementById('lobbyBack')!.addEventListener('click', () => { closeLobbyScreen(); showMenu(); });
 document.getElementById('lobbySignIn')!.addEventListener('click', () =>
   signInWithGoogle().then(() => openLobbyScreen()).catch(console.error));
+
+// Show iOS hint in the auth-required section for Safari users
+if (/Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent)) {
+  const hint = document.getElementById('iosHint');
+  if (hint) hint.style.display = 'block';
+}
 document.getElementById('globalChatSend')!.addEventListener('click', handleGlobalSend);
 document.getElementById('globalChatInput')!.addEventListener('keydown', e => {
   if (e.key === 'Enter') handleGlobalSend();

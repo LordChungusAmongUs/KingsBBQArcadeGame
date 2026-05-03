@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Kings BBQ Bonanza</title>
+  <link rel="manifest" href="/manifest.json" />
+  <!-- iOS PWA: fullscreen standalone + auth token persistence -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Kings BBQ" />
+  <link rel="apple-touch-icon" href="/images/splash.png" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -542,6 +548,9 @@
       <div id="lobbyAuthRequired">
         <p>SIGN IN TO USE THE LOBBY</p>
         <button id="lobbySignIn">SIGN IN WITH GOOGLE</button>
+        <p id="iosHint" style="display:none;font-size:0.72rem;color:#654;max-width:280px;text-align:center;line-height:1.6">
+          📱 ON IPHONE: TAP THE SHARE BUTTON THEN "ADD TO HOME SCREEN" FOR FULLSCREEN MODE AND PERSISTENT SIGN-IN
+        </p>
       </div>
     </div>
 

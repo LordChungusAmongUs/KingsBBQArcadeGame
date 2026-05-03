@@ -1,0 +1,13 @@
+{
+  "name": "Kings BBQ Bonanza",
+  "short_name": "Kings BBQ",
+  "description": "BBQ restaurant arcade game",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#000000",
+  "theme_color": "#ff8844",
+  "icons": [
+    { "src": "/images/splash.png", "sizes": "any", "type": "image/png" }
+  ]
+}

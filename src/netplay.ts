@@ -14,7 +14,7 @@ let _presenceHeartbeat: ReturnType<typeof setInterval> | null = null;
 
 export function setPresence(uid: string, name: string, photo: string): void {
   const r = doc(db, 'presence', uid);
-  const write = () => setDoc(r, { uid, name, photo, ts: serverTimestamp() }).catch(() => {});
+  const write = () => setDoc(r, { uid, name, photo, ts: serverTimestamp() }).catch(e => console.warn('[presence] setPresence failed:', e));
   write();
   if (_presenceHeartbeat) clearInterval(_presenceHeartbeat);
   _presenceHeartbeat = setInterval(write, 60_000); // refresh so stale entries expire
