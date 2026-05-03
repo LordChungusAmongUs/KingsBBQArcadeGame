@@ -316,7 +316,11 @@ function tickSmoker(gs: GameState): void {
   if (!smoker) return;
   for (const slot of smoker.slots) {
     if (slot.state !== 'cooking' || slot.smokerPlacedLevel === undefined) continue;
-    if (gs.level > slot.smokerPlacedLevel && gs.levelTimer <= slot.smokerPlacedAtTimer!) {
+    if (gs.level <= slot.smokerPlacedLevel) continue;
+    const targetReached = slot.smokerPlacedDuringPrep
+      ? gs.prepTimer <= slot.smokerPlacedAtTimer!          // placed during prep → compare prep countdown
+      : gs.levelTimer <= slot.smokerPlacedAtTimer!;        // placed during play → compare level countdown
+    if (targetReached) {
       slot.state = 'ready';
       slot.timer = 0;
     }
@@ -507,7 +511,16 @@ function doInteract(gs: GameState, playerNum: 1 | 2 = 1): void {
           const newSlot = s.slots.find(sl => sl.food === 'raw_pork' && sl.state === 'cooking' && sl.smokerPlacedLevel === undefined);
           if (newSlot) {
             newSlot.smokerPlacedLevel = gs.level;
-            newSlot.smokerPlacedAtTimer = gs.levelTimer;
+            if (gs.prepTimer > 0) {
+              // Placed during prep: track prep timer remaining so it fires at the
+              // same point in the NEXT level's prep period.
+              newSlot.smokerPlacedAtTimer    = gs.prepTimer;
+              newSlot.smokerPlacedDuringPrep = true;
+            } else {
+              // Placed during gameplay: track level countdown timer as before.
+              newSlot.smokerPlacedAtTimer    = gs.levelTimer;
+              newSlot.smokerPlacedDuringPrep = false;
+            }
           }
         }
         p.held.count--;

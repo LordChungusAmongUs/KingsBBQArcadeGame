@@ -13,6 +13,7 @@ export interface CookSlot {
   state: 'empty' | 'cooking' | 'ready' | 'burned';
   smokerPlacedLevel?: number;
   smokerPlacedAtTimer?: number;
+  smokerPlacedDuringPrep?: boolean; // true → compare against prepTimer, false/absent → levelTimer
 }
 
 export interface Station {
