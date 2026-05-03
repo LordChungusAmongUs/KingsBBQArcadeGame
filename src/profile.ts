@@ -90,11 +90,27 @@ let _dirty = false;
 type LevelUpCb  = (oldLv: number, newLv: number) => void;
 type UnlockCb   = (id: string, tier: number, name: string) => void;
 
-let _onLevelUp: LevelUpCb | null = null;
-let _onUnlock:  UnlockCb  | null = null;
+let _onLevelUp:      LevelUpCb | null = null;
+let _onLevelUpEarly: LevelUpCb | null = null;
+let _onUnlock:       UnlockCb  | null = null;
+// Tracks the highest level we've already notified in-game so we don't double-fire
+let _notifiedLevel = 0;
 
-export function setOnLevelUp(cb: LevelUpCb):   void { _onLevelUp = cb; }
+export function setOnLevelUp(cb: LevelUpCb):        void { _onLevelUp = cb; }
+export function setOnEarlyLevelUp(cb: LevelUpCb):   void { _onLevelUpEarly = cb; }
 export function setOnAchievementUnlocked(cb: UnlockCb): void { _onUnlock = cb; }
+
+// Checks whether pending XP has already crossed a new level threshold and fires
+// the early callback immediately (for in-game toast), without modifying the profile.
+function _checkEarlyLevelUp(): void {
+  if (!_profile || !_onLevelUpEarly) return;
+  const baseline = _notifiedLevel > 0 ? _notifiedLevel : _profile.level;
+  const projected = computeLevel(_profile.xp + _pendingXP);
+  if (projected > baseline) {
+    _notifiedLevel = projected;
+    _onLevelUpEarly(baseline, projected);
+  }
+}
 
 export function getProfile(): UserProfile | null { return _profile; }
 
@@ -111,12 +127,12 @@ export async function loadProfile(uid: string): Promise<UserProfile> {
     _profile = { uid, xp: 0, level: 1, stats: {}, achievements: {} };
     await setDoc(r, _profile);
   }
-  _pendingXP = 0; _dirty = false;
+  _pendingXP = 0; _dirty = false; _notifiedLevel = 0;
   return _profile;
 }
 
 export function clearProfile(): void {
-  _profile = null; _pendingXP = 0; _dirty = false;
+  _profile = null; _pendingXP = 0; _dirty = false; _notifiedLevel = 0;
 }
 
 // ── XP ────────────────────────────────────────────────────────────────────────
@@ -125,6 +141,7 @@ export function awardXP(amount: number): void {
   if (!_profile) return;
   _pendingXP += amount;
   _dirty = true;
+  _checkEarlyLevelUp();
 }
 
 // ── Stats & achievements ──────────────────────────────────────────────────────
@@ -161,6 +178,7 @@ function _checkAchievements(key: string, oldVal: number, newVal: number): void {
       }
     }
   }
+  _checkEarlyLevelUp();
 }
 
 // ── Flush to Firestore ────────────────────────────────────────────────────────

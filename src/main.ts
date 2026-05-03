@@ -16,7 +16,7 @@ import { initAuth, signInWithGoogle, signOutUser, checkRedirectResult } from './
 import type { User } from 'firebase/auth';
 import {
   loadProfile, clearProfile, flushSession, getProfile,
-  setOnLevelUp, setOnAchievementUnlocked,
+  setOnLevelUp, setOnEarlyLevelUp, setOnAchievementUnlocked,
   incrementStat, recordMaxStat,
   xpProgress, ACHIEVEMENTS,
   type UserProfile,
@@ -137,8 +137,13 @@ function _nextToast(): void {
   }, 3200);
 }
 
-setOnLevelUp((oldLv, newLv) => {
+// Fires immediately during gameplay when XP crosses a threshold → in-game toast
+setOnEarlyLevelUp((_, newLv) => {
   showToast('LEVEL UP!', `You are now Level ${newLv >= 20 ? 'MAX' : newLv}`);
+});
+
+// Fires at session end (flushSession) → update UI with the now-official level
+setOnLevelUp((_, newLv) => {
   updateAuthUI();
   updateLobbyXPBar();
 });
