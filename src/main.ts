@@ -213,7 +213,7 @@ let onlineUsers: PresenceUser[] = [];
 
 // ─── Menu helpers ─────────────────────────────────────────────────────────────
 
-const menuBtns = ['startBtn','coopBtn','lobbyBtn'].map(id => document.getElementById(id) as HTMLButtonElement);
+const menuBtns = ['startBtn','lobbyBtn'].map(id => document.getElementById(id) as HTMLButtonElement);
 let menuFocusIdx = 0;
 
 function focusMenuBtn(idx: number): void {
