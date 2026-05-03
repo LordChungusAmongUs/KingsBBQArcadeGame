@@ -51,19 +51,24 @@
     .controls { margin-top: 1.2rem; color: #554; font-size: 0.75rem; letter-spacing: 0.1em; text-align: center; line-height: 2; }
 
     /* ── Auth section ──────────────────────────────────────────────── */
-    #authSection { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 1.2rem; }
-    #authOut button {
-      padding: 0.5rem 1.2rem; border: 1px solid #886; color: #aaa; background: transparent;
-      font-family: inherit; font-size: 0.78rem; letter-spacing: 0.2em; cursor: pointer;
-      transition: background 0.2s;
+    #authSection {
+      display: flex; align-items: center; gap: 0.7rem;
+      margin-bottom: 1.4rem;
+      background: rgba(0,0,0,0.45); padding: 0.5rem 1rem; border-radius: 4px;
     }
-    #authOut button:hover { background: #332; }
+    #authOut button {
+      padding: 0.5rem 1.2rem; border: 1px solid #f84; color: #f84; background: transparent;
+      font-family: inherit; font-size: 0.78rem; letter-spacing: 0.2em; cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+    #authOut button:hover { background: #f842; color: #fff; }
     #authIn { display: flex; align-items: center; gap: 0.5rem; }
     #userPhoto { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #f84; }
     #userName { color: #f84; font-size: 0.8rem; letter-spacing: 0.1em; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #userLevel { color: #fa4; font-size: 0.72rem; letter-spacing: 0.1em; }
     #signOutBtn {
-      padding: 0.3rem 0.8rem; border: 1px solid #554; color: #776; background: transparent;
-      font-family: inherit; font-size: 0.7rem; cursor: pointer;
+      padding: 0.3rem 0.8rem; border: 1px solid #554; color: #aaa; background: transparent;
+      font-family: inherit; font-size: 0.7rem; cursor: pointer; transition: background 0.2s, color 0.2s;
     }
     #signOutBtn:hover { background: #221; color: #f84; }
     #userLevel { color: #fa4; font-size: 0.72rem; letter-spacing: 0.1em; margin-left: 0.1rem; }
@@ -436,8 +441,7 @@
 
     <!-- ── Main menu ───────────────────────────────────────────────── -->
     <div id="menu">
-      <!-- Hidden auth elements required by JS -->
-      <div id="authSection" style="display:none">
+      <div id="authSection">
         <div id="authOut">
           <button id="signInBtn">SIGN IN WITH GOOGLE</button>
         </div>
