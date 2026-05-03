@@ -1,31 +1,39 @@
 import { ref, set, remove, onValue, off, onDisconnect, runTransaction } from 'firebase/database';
-import { rtdb } from './firebase';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { rtdb, db } from './firebase';
 import type { GameState } from './types';
 import { buildStations } from './kitchen';
 
-// ── Presence ──────────────────────────────────────────────────────────────────
+// ── Presence (Firestore — works on Safari; RTDB auth iframe is blocked by ITP) ─
 
 export interface PresenceUser {
   uid: string; name: string; photo: string;
 }
 
+let _presenceHeartbeat: ReturnType<typeof setInterval> | null = null;
+
 export function setPresence(uid: string, name: string, photo: string): void {
-  const r = ref(rtdb, `presence/${uid}`);
-  set(r, { name, photo });
-  onDisconnect(r).remove();
+  const r = doc(db, 'presence', uid);
+  const write = () => setDoc(r, { uid, name, photo, ts: serverTimestamp() }).catch(() => {});
+  write();
+  if (_presenceHeartbeat) clearInterval(_presenceHeartbeat);
+  _presenceHeartbeat = setInterval(write, 60_000); // refresh so stale entries expire
 }
 
 export function clearPresence(uid: string): void {
-  remove(ref(rtdb, `presence/${uid}`)).catch(() => {});
+  if (_presenceHeartbeat) { clearInterval(_presenceHeartbeat); _presenceHeartbeat = null; }
+  deleteDoc(doc(db, 'presence', uid)).catch(() => {});
 }
 
 export function watchPresence(cb: (users: PresenceUser[]) => void): () => void {
-  const r = ref(rtdb, 'presence');
-  onValue(r, snap => {
-    const data = snap.val() ?? {};
-    cb(Object.entries(data).map(([uid, v]) => ({ uid, ...(v as any) } as PresenceUser)));
+  const staleMs = 3 * 60 * 1000; // treat entries older than 3 min as offline
+  return onSnapshot(collection(db, 'presence'), snap => {
+    const now = Date.now();
+    const users = snap.docs
+      .map(d => d.data() as PresenceUser & { ts?: { toMillis(): number } })
+      .filter(u => !u.ts || now - u.ts.toMillis() < staleMs);
+    cb(users);
   });
-  return () => off(r);
 }
 
 // ── Matchmaking ───────────────────────────────────────────────────────────────

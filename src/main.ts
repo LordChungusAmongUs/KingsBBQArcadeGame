@@ -1007,3 +1007,7 @@ splashEl.addEventListener('click', dismissSplash);
 splashEl.addEventListener('touchend', (e) => { e.preventDefault(); dismissSplash(); });
 
 playMusic('/audio/theme.mp3');
+
+window.addEventListener('beforeunload', () => {
+  if (user) clearPresence(user.uid);
+});
