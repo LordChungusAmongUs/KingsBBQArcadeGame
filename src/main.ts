@@ -221,12 +221,18 @@ function focusMenuBtn(idx: number): void {
   menuBtns[menuFocusIdx].focus();
 }
 
+function enterFullscreenLandscape(): void {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+  (window.screen.orientation as any)?.lock?.('landscape').catch(() => {});
+}
+
 function showMenu(): void {
   gs = null;
   menu.style.display = 'flex';
   touchControls.classList.remove('game-active');
   updateMenuLeaderboard();
   setTimeout(() => focusMenuBtn(0), 0);
+  enterFullscreenLandscape();
   playMusic('/audio/theme.mp3');
 }
 
@@ -994,6 +1000,7 @@ menu.style.display = 'none';
 function dismissSplash(): void {
   if (splashEl.style.display === 'none') return;
   splashEl.style.display = 'none';
+  enterFullscreenLandscape();
   showMenu();
 }
 
