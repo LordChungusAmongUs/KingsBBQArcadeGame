@@ -970,7 +970,6 @@ document.getElementById('pgPlayAgain')!.addEventListener('click', () => {
 // ─── Menu buttons ─────────────────────────────────────────────────────────────
 
 document.getElementById('startBtn')!.addEventListener('click', () => { isCoop = false; startLevel(1, STARTING_MONEY); });
-document.getElementById('coopBtn')!.addEventListener('click', () => { isCoop = true;  startLevel(1, STARTING_MONEY); });
 document.getElementById('lobbyBtn')!.addEventListener('click', openLobbyScreen);
 
 function toggleFullscreen(): void {
