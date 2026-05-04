@@ -323,6 +323,8 @@ function tickSmoker(gs: GameState): void {
     if (targetReached) {
       slot.state = 'ready';
       slot.timer = 0;
+      awardXP(1);
+      incrementStat('shoulders_smoked', 1);
     }
   }
 }
