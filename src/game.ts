@@ -382,6 +382,7 @@ function tickPlayer(gs: GameState, dt: number): void {
   if (keys.has('KeyD') || (!gs.coop && keys.has('ArrowRight'))) dx += 1;
   if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
   if (dx !== 0 || dy !== 0) { p.facing = Math.atan2(dy, dx); p.walkFrame += dt / 180; }
+  else { p.walkFrame = 0; }
   const spd = PLAYER_SPEED * dt / 1000;
   p.x = Math.max(40, Math.min(1060, p.x + dx * spd));
   p.y = Math.max(155, Math.min(690, p.y + dy * spd));
@@ -402,6 +403,7 @@ function tickPlayer2(gs: GameState, dt: number): void {
   if (keys.has('ArrowRight')) dx += 1;
   if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
   if (dx !== 0 || dy !== 0) { p.facing = Math.atan2(dy, dx); p.walkFrame += dt / 180; }
+  else { p.walkFrame = 0; }
   const spd = PLAYER_SPEED * dt / 1000;
   p.x = Math.max(40, Math.min(1060, p.x + dx * spd));
   p.y = Math.max(155, Math.min(690, p.y + dy * spd));
