@@ -139,8 +139,8 @@ export const STAGED_SPOIL_TIME     = 75000;
 export const LABOR_RATE            = 10;   // cents/sec during prep + play ($0.10/s)
 export const OVERTIME_LABOR_RATE   = 15;   // cents/sec during overtime ($0.15/s)
 export const OVERHEAD_COST         = 2000; // $20 overhead deducted at end of each level
-export const STARTING_MONEY        = 2500; // $25 starting cash
-export const BASE_MAX_FAILS        = 2;
-export const UPSET_THRESHOLDS      = Array.from({ length: 20 }, (_, i) => (i + 1) * 5000); // $50, $100, $150 ... $1000
+export const STARTING_MONEY        = 5000; // $50 starting cash
+export const BASE_MAX_FAILS        = 3;
+export const UPSET_THRESHOLDS      = Array.from({ length: 20 }, (_, i) => (i + 1) * 10000); // $100, $200, $300 ... $2000
 export const PLAYER_SPEED  = 330;
 export const INTERACT_RANGE = 30;

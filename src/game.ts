@@ -132,6 +132,12 @@ export function tickGame(gs: GameState, dt: number): void {
   if (gs.coop && gs.player2) tickPlayer2(gs, dt);
   if (input.interactPressed)   doInteract(gs, 1);
   if (input.p2InteractPressed) doInteract(gs, 2);
+
+  // Bankruptcy: $0 or below ends the game immediately
+  if (gs.score <= 0 && gs.phase === 'playing') {
+    gs.phase = 'game_over';
+    gs.levelEndTimer = 4000;
+  }
 }
 
 // ─── Labor & thresholds ───────────────────────────────────────────────────────
