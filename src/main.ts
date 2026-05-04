@@ -9,7 +9,7 @@ const GAME_TRACKS = [
 ];
 import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp, keys } from './input';
 import { createGame, tickGame, resolveCollisions } from './game';
-import { initRenderer, render, resizeRenderer, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu } from './renderer';
+import { initRenderer, render, resizeRenderer, loadSprites, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu } from './renderer';
 import type { GameState, CookSlot } from './types';
 import { LEVELS, STARTING_MONEY, PLAYER_SPEED } from './config';
 import { loadLeaderboard, saveEntry, type LeaderboardEntry } from './leaderboard';
@@ -46,6 +46,7 @@ resizeRenderer(canvas);
 initAudio();
 initInput();
 initRenderer(canvas);
+loadSprites();
 
 // ─── Touch controls ───────────────────────────────────────────────────────────
 

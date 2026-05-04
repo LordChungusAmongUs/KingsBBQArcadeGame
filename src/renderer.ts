@@ -32,6 +32,23 @@ function abbrOrder(name: string): [string, string] {
 let ctx: CanvasRenderingContext2D;
 let W = 0, H = 0;
 
+// ─── Sprite cache ─────────────────────────────────────────────────────────────
+
+const _sprites: Partial<Record<string, HTMLImageElement>> = {};
+
+export function loadSprites(): void {
+  const keys = [
+    'p1m_down_idle',  'p1m_down_walk1',  'p1m_down_walk2',
+    'p1m_up_idle',    'p1m_up_walk1',    'p1m_up_walk2',
+    'p1m_left_idle',  'p1m_left_walk1',  'p1m_left_walk2',
+  ];
+  for (const key of keys) {
+    const img = new Image();
+    img.src = `/images/${key}.png`;
+    img.onload = () => { _sprites[key] = img; };
+  }
+}
+
 export function initRenderer(canvas: HTMLCanvasElement): void {
   ctx = canvas.getContext('2d')!;
   W = canvas.width; H = canvas.height;
@@ -502,6 +519,19 @@ function drawPrepTable(gs: GameState, s: Station): void {
 
 // ─── Player ───────────────────────────────────────────────────────────────────
 
+const SPRITE_W = 64, SPRITE_H = 72;
+
+function facingDir(angle: number): 'up' | 'down' | 'left' | 'right' {
+  if (Math.abs(angle) < Math.PI / 4) return 'right';
+  if (Math.abs(angle) > (3 * Math.PI) / 4) return 'left';
+  return angle > 0 ? 'down' : 'up';
+}
+
+function spriteFrame(wf: number, menuOpen: boolean): 'idle' | 'walk1' | 'walk2' {
+  if (menuOpen || wf === 0) return 'idle';
+  return Math.floor((wf / (Math.PI / 2)) % 2) === 0 ? 'walk1' : 'walk2';
+}
+
 function drawPlayer(gs: GameState): void {
   drawPlayerSprite(gs.player, '#c8402a', gs.activeMenu?.owner === 1);
   if (gs.coop && gs.player2) drawPlayerSprite(gs.player2, '#2060c8', gs.activeMenu?.owner === 2);
@@ -511,24 +541,38 @@ function drawPlayerSprite(p: import('./types').Player, apronColor: string, menuO
   ctx.save();
   ctx.translate(p.x, p.y);
 
+  // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath(); ctx.ellipse(0, 10, p.radius, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, 16, p.radius, 6, 0, 0, Math.PI * 2); ctx.fill();
 
-  const bob = menuOpen ? 0 : Math.sin(p.walkFrame) * 2;
-  ctx.translate(0, bob);
-  ctx.fillStyle = '#e8c87a';
-  ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI * 2); ctx.fill();
+  const dir = facingDir(p.facing);
+  const frame = spriteFrame(p.walkFrame, menuOpen);
+  const mirrorRight = dir === 'right';
+  const spriteKey = `p1m_${mirrorRight ? 'left' : dir}_${frame}`;
+  const img = _sprites[spriteKey];
 
-  ctx.fillStyle = apronColor;
-  ctx.beginPath(); ctx.ellipse(0, 4, p.radius - 4, p.radius * 0.6, 0, 0, Math.PI); ctx.fill();
+  // Body
+  ctx.save();
+  if (mirrorRight) ctx.scale(-1, 1);
+  if (img) {
+    ctx.drawImage(img, -SPRITE_W / 2, -SPRITE_H / 2, SPRITE_W, SPRITE_H);
+  } else {
+    // Fallback: procedural character while sprites load
+    const bob = menuOpen ? 0 : Math.sin(p.walkFrame) * 2;
+    ctx.translate(0, bob);
+    ctx.fillStyle = '#e8c87a';
+    ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = apronColor;
+    ctx.beginPath(); ctx.ellipse(0, 4, p.radius - 4, p.radius * 0.6, 0, 0, Math.PI); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-8, -p.radius - 10, 16, 12);
+    ctx.beginPath(); ctx.ellipse(0, -p.radius - 10, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#333';
+    ctx.beginPath(); ctx.arc(Math.cos(p.facing) * 10, Math.sin(p.facing) * 10, 4, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
 
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(-8, -p.radius - 10, 16, 12);
-  ctx.beginPath(); ctx.ellipse(0, -p.radius - 10, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
-
-  ctx.fillStyle = '#333';
-  ctx.beginPath(); ctx.arc(Math.cos(p.facing) * 10, Math.sin(p.facing) * 10, 4, 0, Math.PI * 2); ctx.fill();
-
+  // Held item (world space — never mirrored)
   if (p.held) {
     const holdX = Math.cos(p.facing) * (p.radius + 16);
     const holdY = Math.sin(p.facing) * (p.radius + 16);
