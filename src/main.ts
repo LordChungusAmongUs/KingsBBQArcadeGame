@@ -1198,6 +1198,8 @@ document.getElementById('tutorialBtn')!.addEventListener('click', () => {
   tutorialPlayerMoved = false; tutorialBaseCompleted = 0; tutorialModalActive = false;
   startLevel(1, STARTING_MONEY);
   if (gs) { gs.tutorialOrderQueue = []; gs.levelTimer = 9999999; TUTORIAL_STEPS[0]?.onEnter?.(gs); }
+  // Pre-render one frame so the canvas isn't black on first-ever load when a modal appears
+  if (gs) render(gs);
   // Flush interact flags so the click/keypress that opened this screen doesn't dismiss the first modal
   input.interactPressed = false; input.p2InteractPressed = false;
 });
