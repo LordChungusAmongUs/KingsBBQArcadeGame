@@ -982,6 +982,7 @@ document.getElementById('achievementsClose')?.addEventListener('click', closeAch
 document.getElementById('lobbyAchievements')?.addEventListener('click', openAchievementsOverlay);
 
 function openLobbyScreen(): void {
+  if (gs !== null && screen === 'game') return; // never hijack an active game
   menu.style.display = 'none';
   lobbyScreen.style.display = 'flex';
   if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
@@ -1259,8 +1260,8 @@ document.getElementById('tutorialBtn')!.addEventListener('click', () => {
   if (gs) { gs.tutorialOrderQueue = []; gs.levelTimer = 9999999; TUTORIAL_STEPS[0]?.onEnter?.(gs); }
   // Pre-render one frame so the canvas isn't black on first-ever load when a modal appears
   if (gs) render(gs);
-  // Flush interact flags so the click/keypress that opened this screen doesn't dismiss the first modal
-  input.interactPressed = false; input.p2InteractPressed = false;
+  // Full input flush — clear all flags including any held by the click/touch that launched this
+  flushFrame();
 });
 document.getElementById('startBtn')!.addEventListener('click', () => { isCoop = false; isTutorial = false; isProMode = false; startLevel(1, STARTING_MONEY); });
 document.getElementById('lobbyBtn')!.addEventListener('click', openLobbyScreen);
@@ -1278,7 +1279,7 @@ window.addEventListener('keydown', e => {
     isPaused = !isPaused;
     if (isPaused) { pauseMenuIdx = 0; pauseSubScreen = null; } else pauseSubScreen = null;
   }
-  if (menu.style.display === 'none') return;
+  if (menu.style.display === 'none' || gs !== null) return;
   if (e.code === 'ArrowLeft'  || e.code === 'ArrowUp')   { e.preventDefault(); focusMenuBtn(menuFocusIdx-1); }
   if (e.code === 'ArrowRight' || e.code === 'ArrowDown') { e.preventDefault(); focusMenuBtn(menuFocusIdx+1); }
   if (e.code === 'Space' || e.code === 'Enter')          { e.preventDefault(); menuBtns[menuFocusIdx].click(); }
