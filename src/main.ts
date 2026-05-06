@@ -188,8 +188,8 @@ let leaderboardEntries: LeaderboardEntry[] = [];
 let lastGameWasCoop = false;
 let lastGameWasOnline = false;
 let lastGameScore = 0, lastGameLevel = 1;
-let runSales = 0, runCOGS = 0, runLabor = 0, runWaste = 0, runOverhead = 0, runCompleted = 0;
-let lastRunSales = 0, lastRunProfitPct = 0, lastRunExpenses = 0;
+let runSales = 0, runCOGS = 0, runLabor = 0, runWaste = 0, runOverhead = 0, runCompleted = 0, runFailed = 0;
+let lastRunSales = 0, lastRunProfitPct = 0, lastRunExpenses = 0, lastRunSatisfactionPct = 0;
 let isProMode = false;
 let lastGameWasPro = false;
 let pgFocusIdx = 0;
@@ -329,9 +329,11 @@ function preparePostGame(g: GameState): void {
   flushSession().catch(console.error);
   const totalExpenses = runCOGS + runLabor + runWaste + runOverhead;
   const totalProfit = runSales - totalExpenses;
+  const totalOrders = runCompleted + runFailed;
   lastRunSales = runSales;
   lastRunProfitPct = runSales > 0 ? Math.round((totalProfit / runSales) * 100) : 0;
   lastRunExpenses = runCOGS + runLabor;
+  lastRunSatisfactionPct = totalOrders > 0 ? Math.round((runCompleted / totalOrders) * 100) : 100;
   lastGameScore = runSales;
   lastGameLevel = g.level;
   nameChars = ['A','A','A']; nameCursor = 0;
@@ -363,8 +365,8 @@ function handleNameEntry(): void {
 function submitName(): void {
   const name = nameChars.join('').trim() || 'AAA';
   hideMobileNameEntry();
-  leaderboardMode = lastGameWasPro ? 'pro' : 'rookie';
-  leaderboardEntries = saveEntry(name, lastGameScore, lastGameLevel, lastRunProfitPct, lastRunExpenses, leaderboardMode);
+  leaderboardMode = lastGameWasPro ? (lastGameWasCoop ? 'pro_coop' : 'pro_solo') : 'rookie';
+  leaderboardEntries = saveEntry(name, lastGameScore, lastGameLevel, lastRunProfitPct, lastRunExpenses, lastRunSatisfactionPct, leaderboardMode);
   if (user) saveCloudScore(user.uid, user.displayName??'', user.photoURL??'', name, lastGameScore, lastGameLevel).catch(()=>{});
   enterLeaderboard();
 }
@@ -431,7 +433,7 @@ function hideMobileNameEntry(): void {
 function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0): void {
   if (n === 1) {
     incrementStat(isCoop ? 'coop_sessions' : 'solo_sessions', 1);
-    runSales = 0; runCOGS = 0; runLabor = 0; runWaste = 0; runOverhead = 0; runCompleted = 0;
+    runSales = 0; runCOGS = 0; runLabor = 0; runWaste = 0; runOverhead = 0; runCompleted = 0; runFailed = 0;
     // Small delay so the Play-button click unlocks audio before we switch tracks
     setTimeout(() => playPlaylist(GAME_TRACKS), 80);
   }
@@ -823,7 +825,7 @@ function loop(now: number): void {
       flushFrame(); requestAnimationFrame(loop); return;
     }
     if (gs) render(gs);
-    drawGameReport(lastRunSales, runCOGS, runLabor, runWaste, runOverhead, runCompleted, lastGameLevel);
+    drawGameReport(lastRunSales, runCOGS, runLabor, runWaste, runOverhead, runCompleted, runFailed, lastGameLevel);
     flushFrame(); requestAnimationFrame(loop); return;
   }
   // Post-game overlay — arrow key navigation
@@ -858,7 +860,7 @@ function loop(now: number): void {
           case 1: isPaused = false; flushFrame(); if (isOnlineGame) cleanupOnlineGame(); showMenu(); return;
           case 2: pauseSubScreen = 'restaurant_menu'; break;
           case 3: pauseSubScreen = 'controls'; break;
-          case 4: leaderboardMode = isProMode ? 'pro' : 'rookie'; leaderboardEntries = loadLeaderboard(leaderboardMode); leaderboardReturn = 'pause'; screen = 'leaderboard'; break;
+          case 4: leaderboardMode = isProMode ? (isCoop ? 'pro_coop' : 'pro_solo') : 'rookie'; leaderboardEntries = loadLeaderboard(leaderboardMode); leaderboardReturn = 'pause'; screen = 'leaderboard'; break;
         }
       }
     }
@@ -873,7 +875,8 @@ function loop(now: number): void {
   if (gs.phase === 'level_end' && (gs.levelEndTimer <= 0 || input.p2InteractPressed || input.interactPressed)) {
     recordLevelStats(gs);
     runSales += gs.levelSales; runCOGS += gs.levelCOGS; runLabor += gs.levelLabor;
-    runWaste += gs.levelWaste; runOverhead += OVERHEAD_COST; runCompleted += gs.completed;
+    runWaste += gs.levelWaste; runOverhead += OVERHEAD_COST;
+    runCompleted += gs.completed; runFailed += gs.failed;
     if (isTutorial && gs.level === 2) {
       isTutorial = false; tutorialStep = 0; tutorialModalActive = false;
       goToNameEntry(gs); requestAnimationFrame(loop); return;
@@ -895,7 +898,7 @@ function loop(now: number): void {
   if (gs.phase === 'game_over') {
     if (gs.levelEndTimer <= 0) {
       runSales += gs.levelSales; runCOGS += gs.levelCOGS; runLabor += gs.levelLabor;
-      runWaste += gs.levelWaste; runCompleted += gs.completed;
+      runWaste += gs.levelWaste; runCompleted += gs.completed; runFailed += gs.failed;
       recordLevelStats(gs);
       goToGameReport(gs); requestAnimationFrame(loop); return;
     }

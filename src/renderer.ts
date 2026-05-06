@@ -334,12 +334,11 @@ function menuSlotLayout(count: number): Array<{ idx: number; dx: number; dy: num
 }
 
 function drawWarmerMenu(gs: GameState, s: Station): void {
-  const uniqueFoods = [...new Set(s.slots.filter(sl => sl.food && sl.state === 'ready').map(sl => sl.food!))] as import('./types').FoodId[];
-  if (uniqueFoods.length === 0) return;
+  const slotCount = Math.min(s.slots.length, 4);
+  if (slotCount === 0) return;
 
-  const layout = menuSlotLayout(uniqueFoods.length);
+  const layout = menuSlotLayout(slotCount);
   const CW = 72, CH = 58, STEP = 72;
-  // Anchor popup to the right of the station so it doesn't clip the left edge
   const popCX = s.x + s.w + 90;
   const popCY = s.y + s.h / 2;
 
@@ -367,33 +366,33 @@ function drawWarmerMenu(gs: GameState, s: Station): void {
   }
 
   for (const pos of layout) {
-    const food = uniqueFoods[pos.idx];
-    const def = FOOD.get(food);
-    const count = s.slots.filter(sl => sl.food === food && sl.state === 'ready').length;
+    const slot = s.slots[pos.idx];
+    const food = slot?.state === 'ready' ? slot.food : null;
+    const def = food ? FOOD.get(food) : null;
     const cx = popCX + pos.dx * STEP;
     const cy = popCY + pos.dy * STEP;
     const lx = cx - CW / 2, ly = cy - CH / 2;
 
-    ctx.fillStyle = '#2a1400';
+    ctx.fillStyle = food ? '#2a1400' : '#111008';
     ctx.beginPath(); ctx.roundRect(lx, ly, CW, CH, 5); ctx.fill();
-    ctx.strokeStyle = '#c06020'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = food ? '#c06020' : '#444';
+    ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.roundRect(lx, ly, CW, CH, 5); ctx.stroke();
 
     ctx.fillStyle = '#f84';
     ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left';
     ctx.fillText(pos.arrow, lx + 5, ly + 14);
 
-    ctx.fillStyle = def?.color ?? '#aaa';
-    ctx.beginPath(); ctx.arc(cx, cy - 2, 13, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1; ctx.stroke();
-
-    if (count > 1) {
-      ctx.fillStyle = '#fff'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'right';
-      ctx.fillText(`×${count}`, lx + CW - 4, ly + 14);
+    if (food && def) {
+      ctx.fillStyle = def.color ?? '#aaa';
+      ctx.beginPath(); ctx.arc(cx, cy - 2, 13, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#ccd'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
+      ctx.fillText(def.name ?? food, cx, ly + CH - 6);
+    } else {
+      ctx.fillStyle = '#555'; ctx.font = '9px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('EMPTY', cx, cy + 4);
     }
-
-    ctx.fillStyle = '#ccd'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
-    ctx.fillText(def?.name ?? food, cx, ly + CH - 6);
   }
 
   ctx.fillStyle = 'rgba(255,255,255,0.15)';
@@ -1283,7 +1282,7 @@ export function drawNameEntry(chars: string[], cursor: number, score: number, le
 export function drawLeaderboard(
   entries: import('./leaderboard').LeaderboardEntry[],
   highlightScore: number,
-  mode: 'rookie' | 'pro' = 'rookie',
+  mode: import('./leaderboard').LeaderboardMode = 'rookie',
 ): void {
   ctx.fillStyle = 'rgba(0,0,0,0.92)';
   ctx.fillRect(0, 0, W, H);
@@ -1305,7 +1304,10 @@ export function drawLeaderboard(
   ctx.textAlign = 'center';
   ctx.fillStyle = blink ? '#f84' : '#b52';
   ctx.font = 'bold 22px monospace';
-  ctx.fillText(mode === 'pro' ? '★  PRO HIGH SCORES  ★' : '★  ROOKIE HIGH SCORES  ★', cx, y); y += 24;
+  const lbTitle = mode === 'pro_coop' ? '★  PRO CO-OP HIGH SCORES  ★'
+                : mode === 'pro_solo' ? '★  PRO HIGH SCORES  ★'
+                : '★  ROOKIE HIGH SCORES  ★';
+  ctx.fillText(lbTitle, cx, y); y += 24;
 
   ctx.strokeStyle = '#432'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(px + 20, y); ctx.lineTo(px + panelW - 20, y); ctx.stroke(); y += 14;
@@ -1378,13 +1380,14 @@ export function drawLeaderboard(
 
 export function drawGameReport(
   runSales: number, runCOGS: number, runLabor: number,
-  runWaste: number, runOverhead: number, runCompleted: number,
+  runWaste: number, runOverhead: number,
+  runCompleted: number, runFailed: number,
   level: number,
 ): void {
   ctx.fillStyle = 'rgba(0,0,0,0.93)';
   ctx.fillRect(0, 0, W, H);
 
-  const panelW = 480, panelH = 420;
+  const panelW = 500, panelH = 450;
   const px = (W - panelW) / 2, py = (H - panelH) / 2;
   ctx.fillStyle = '#060402';
   ctx.fillRect(px, py, panelW, panelH);
@@ -1406,43 +1409,53 @@ export function drawGameReport(
 
   const totalExpenses = runCOGS + runLabor + runWaste + runOverhead;
   const totalProfit = runSales - totalExpenses;
-  const profitPct = runSales > 0 ? Math.round((totalProfit / runSales) * 100) : 0;
+  const pct = (v: number) => runSales > 0 ? Math.round((v / runSales) * 100) : 0;
+  const totalOrders = runCompleted + runFailed;
+  const satPct = totalOrders > 0 ? Math.round((runCompleted / totalOrders) * 100) : 100;
 
-  const rows: Array<[string, number, string]> = [
-    ['TOTAL SALES',  runSales,     '#fff'],
-    ['FOOD COSTS',   -runCOGS,     '#f88'],
-    ['LABOR',        -runLabor,    '#fa8'],
-    ['WASTE',        -runWaste,    '#f86'],
-    ['OVERHEAD',     -runOverhead, '#f64'],
-    ['NET PROFIT',   totalProfit,  totalProfit >= 0 ? '#4f8' : '#f44'],
+  // rows: [label, dollar value (negative = expense), color, pct-of-sales or null]
+  const rows: Array<[string, number, string, number | null]> = [
+    ['TOTAL SALES',  runSales,     '#fff',                   null],
+    ['FOOD COSTS',   -runCOGS,     '#f88',                   pct(runCOGS)],
+    ['LABOR',        -runLabor,    '#fa8',                   pct(runLabor)],
+    ['WASTE',        -runWaste,    '#f86',                   pct(runWaste)],
+    ['OVERHEAD',     -runOverhead, '#f64',                   pct(runOverhead)],
+    ['NET PROFIT',   totalProfit,  totalProfit >= 0 ? '#4f8' : '#f44', pct(totalProfit)],
   ];
 
-  for (const [label, value, color] of rows) {
+  const dolX = px + panelW - 110;
+  const pctX = px + panelW - 22;
+
+  for (const [label, value, color, p] of rows) {
     ctx.textAlign = 'left';
     ctx.fillStyle = '#998'; ctx.font = '13px monospace';
-    ctx.fillText(label, px + 60, y);
+    ctx.fillText(label, px + 44, y);
     ctx.textAlign = 'right';
     ctx.fillStyle = color;
     const sign = value < 0 ? '-$' : '$';
-    ctx.fillText(`${sign}${(Math.abs(value) / 100).toFixed(2)}`, px + panelW - 60, y);
-    y += 26;
+    ctx.fillText(`${sign}${(Math.abs(value) / 100).toFixed(2)}`, dolX, y);
+    if (p !== null) {
+      ctx.fillStyle = '#665'; ctx.font = '10px monospace';
+      ctx.fillText(`${p}%`, pctX, y);
+    }
+    y += 25;
   }
 
   ctx.strokeStyle = '#321'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(px + 20, y); ctx.lineTo(px + panelW - 20, y); ctx.stroke(); y += 18;
+  ctx.beginPath(); ctx.moveTo(px + 20, y); ctx.lineTo(px + panelW - 20, y); ctx.stroke(); y += 16;
 
+  const satColor = satPct >= 90 ? '#4f8' : satPct >= 70 ? '#ff8' : '#f44';
   const metaRows: Array<[string, string, string]> = [
-    ['PROFIT MARGIN', `${profitPct}%`, profitPct >= 20 ? '#4f8' : profitPct >= 0 ? '#ff8' : '#f44'],
-    ['ORDERS SERVED', String(runCompleted), '#fff'],
+    ['CUSTOMER SAT.', `${satPct}%  (${runCompleted}/${totalOrders} orders)`, satColor],
     ['STAGES REACHED', String(level), '#fff'],
   ];
   for (const [label, val, color] of metaRows) {
     ctx.textAlign = 'left';
     ctx.fillStyle = '#998'; ctx.font = '13px monospace';
-    ctx.fillText(label, px + 60, y);
+    ctx.fillText(label, px + 44, y);
     ctx.textAlign = 'right';
     ctx.fillStyle = color;
-    ctx.fillText(val, px + panelW - 60, y); y += 22;
+    ctx.fillText(val, pctX, y); y += 22;
   }
 
   const blink = Math.floor(Date.now() / 500) % 2 === 0;

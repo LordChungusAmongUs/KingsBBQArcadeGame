@@ -237,13 +237,6 @@ function tickMenu(gs: GameState): void {
     return;
   }
 
-  const isWarmer = st.kind === 'warmer';
-  const menu: FoodId[] = isWarmer
-    ? [...new Set(st.slots.filter(sl => sl.food && sl.state === 'ready').map(sl => sl.food!))]
-    : (st.menu ?? []);
-
-  if (isWarmer && menu.length === 0) { gs.activeMenu = null; return; }
-
   const dirs: Array<['up'|'left'|'right'|'down', boolean]> = owner === 2 ? [
     ['up',    input.p2MenuPickUp],
     ['left',  input.p2MenuPickLeft],
@@ -256,38 +249,62 @@ function tickMenu(gs: GameState): void {
     ['down',  input.menuPickDown],
   ];
   const p = ownerP;
-  for (const [dir, pressed] of dirs) {
-    if (!pressed) continue;
-    const idx = menuKeySlot(menu.length, dir);
-    if (idx < 0 || idx >= menu.length) continue;
-    const food = menu[idx];
-    if (isWarmer) {
-      const slot = st.slots.find(sl => sl.food === food && sl.state === 'ready');
+
+  // ── Warmer: each physical slot maps to one arrow key ──────────────────────
+  if (st.kind === 'warmer') {
+    const hasContent = st.slots.some(sl => sl.food);
+    if (!hasContent && !p.held) { gs.activeMenu = null; return; }
+    const slotCount = Math.min(st.slots.length, 4);
+    for (const [dir, pressed] of dirs) {
+      if (!pressed) continue;
+      const idx = menuKeySlot(slotCount, dir);
+      if (idx < 0 || idx >= slotCount) continue;
+      const slot = st.slots[idx];
       if (!slot) continue;
-      slot.food = null; slot.state = 'empty'; slot.timer = 0;
-      if (p.held === null) {
-        p.held = { food, count: 1, burned: false };
-      } else if (p.held.food === food && !p.held.burned && p.held.count < MAX_STACK) {
-        p.held.count++;
-      } else {
-        // Return current held item(s) to the warmer before swapping
-        if (!p.held.burned) {
+      if (slot.state === 'ready' && slot.food) {
+        // Pick up from this slot
+        const food = slot.food;
+        slot.food = null; slot.state = 'empty'; slot.timer = 0;
+        if (p.held === null) {
+          p.held = { food, count: 1, burned: false };
+        } else if (p.held.food === food && !p.held.burned && p.held.count < MAX_STACK) {
+          p.held.count++;
+        } else if (!p.held.burned) {
+          // Swap: return held to an empty slot, then pick up
           for (let i = 0; i < p.held.count; i++) {
             const es = st.slots.find(sl => sl.state === 'empty');
             if (!es) break;
             es.food = p.held!.food; es.state = 'ready'; es.timer = 0;
           }
+          p.held = { food, count: 1, burned: false };
         }
-        p.held = { food, count: 1, burned: false };
+      } else if (slot.state === 'empty' && p.held && !p.held.burned) {
+        // Place one item from hand into this slot
+        const def = FOOD.get(p.held.food);
+        if (def && !def.isRaw && p.held.food !== 'whole_pork') {
+          slot.food = p.held.food; slot.state = 'ready'; slot.timer = 0;
+          p.held.count--;
+          if (p.held.count <= 0) p.held = null;
+        }
       }
+      break;
+    }
+    return;
+  }
+
+  // ── Cooler / Freezer: food-type menu ─────────────────────────────────────
+  const menu = st.menu ?? [];
+  for (const [dir, pressed] of dirs) {
+    if (!pressed) continue;
+    const idx = menuKeySlot(menu.length, dir);
+    if (idx < 0 || idx >= menu.length) continue;
+    const food = menu[idx];
+    if (p.held === null) {
+      p.held = { food, count: 1, burned: false };
+    } else if (p.held.food === food && !p.held.burned && p.held.count < MAX_STACK) {
+      p.held.count++;
     } else {
-      if (p.held === null) {
-        p.held = { food, count: 1, burned: false };
-      } else if (p.held.food === food && !p.held.burned && p.held.count < MAX_STACK) {
-        p.held.count++;
-      } else {
-        p.held = { food, count: 1, burned: false };
-      }
+      p.held = { food, count: 1, burned: false };
     }
     break;
   }
@@ -689,20 +706,8 @@ function doInteract(gs: GameState, playerNum: 1 | 2 = 1): void {
     return;
   }
 
-  // ── Warmer: place cooked food directly; open menu to retrieve ──
+  // ── Warmer: interact toggles the menu; arrow keys handle place/pickup ──
   if (s.kind === 'warmer') {
-    const def = p.held ? FOOD.get(p.held.food) : null;
-    if (p.held && def && !def.isRaw && !p.held.burned && p.held.food !== 'whole_pork') {
-      const empty = s.slots.find(sl => sl.state === 'empty');
-      if (empty) {
-        empty.food = p.held.food;
-        empty.state = 'ready';
-        empty.timer = 0;
-        p.held.count--;
-        if (p.held.count <= 0) p.held = null;
-      }
-      return;
-    }
     if (gs.activeMenu?.stationId === s.id && gs.activeMenu.owner === playerNum) {
       gs.activeMenu = null;
     } else {
