@@ -41,6 +41,7 @@ export interface Order {
   elapsed: number;
   status: 'active' | 'plating' | 'failed';
   spoilTimer: number;  // ms since first partial item placed; resets done flags when it expires
+  burnedCount: number; // overcooked items added to this order (each costs 50%/totalItems)
 }
 
 export interface HeldItem {
@@ -103,6 +104,8 @@ export interface GameState {
   levelLabor: number;
   levelWaste: number;
   salesByItem: Record<string, { count: number; revenue: number }>;
+  levelSatisfactionSum: number;   // sum of per-order satisfaction scores (0-100) this level
+  levelSatisfactionCount: number; // total orders counted (served + walked out)
 }
 
 export interface FoodDef {

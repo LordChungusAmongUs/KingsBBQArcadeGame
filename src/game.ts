@@ -60,12 +60,24 @@ export function createGame(level: number, carryScore = 0, coop = false, smokerSl
     levelWaste: 0,
     salesByItem: {},
     tutorialOrderQueue: [],
+    levelSatisfactionSum: 0,
+    levelSatisfactionCount: 0,
   };
   if (smokerSlots) {
     const smoker = game.stations.find(s => s.kind === 'smoker');
     if (smoker) smoker.slots = smokerSlots.map(sl => ({ ...sl }));
   }
   return game;
+}
+
+function calcOrderSatisfaction(order: Order): number {
+  const frac = order.elapsed / order.timeLimit;
+  let sat = 100;
+  if (frac >= 0.75)      sat -= 25; // red zone
+  else if (frac >= 0.5)  sat -= 10; // yellow zone
+  const totalItems = order.items.length;
+  if (totalItems > 0) sat -= Math.round(order.burnedCount * (50 / totalItems));
+  return Math.max(0, sat);
 }
 
 export function tickGame(gs: GameState, dt: number): void {
@@ -195,6 +207,7 @@ function tickOrders(gs: GameState, dt: number): void {
     if (o.elapsed >= o.timeLimit) {
       o.status = 'failed';
       gs.failed++;
+      gs.levelSatisfactionCount++; // walk-out = 0%, don't add to sum
       incrementStat('customers_lost', 1);
       if (gs.failed >= gs.maxFails) { gs.phase = 'game_over'; gs.levelEndTimer = 4000; }
     }
@@ -433,6 +446,7 @@ function spawnOrder(gs: GameState): void {
     elapsed: 0,
     status: 'active',
     spoilTimer: 0,
+    burnedCount: 0,
   });
 }
 
@@ -736,6 +750,8 @@ function doInteract(gs: GameState, playerNum: 1 | 2 = 1): void {
         else gs.salesByItem[order.name] = { count: 1, revenue: price };
         checkThresholds(gs);
         gs.completed++;
+        gs.levelSatisfactionSum += calcOrderSatisfaction(order);
+        gs.levelSatisfactionCount++;
         order.status = 'failed'; // remove from ticket board
         awardXP(1);
         const [base] = order.name.split('+');

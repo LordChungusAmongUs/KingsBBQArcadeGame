@@ -189,6 +189,7 @@ let lastGameWasCoop = false;
 let lastGameWasOnline = false;
 let lastGameScore = 0, lastGameLevel = 1;
 let runSales = 0, runCOGS = 0, runLabor = 0, runWaste = 0, runOverhead = 0, runCompleted = 0, runFailed = 0;
+let runSatisfactionSum = 0, runSatisfactionCount = 0;
 let lastRunSales = 0, lastRunProfitPct = 0, lastRunExpenses = 0, lastRunSatisfactionPct = 0;
 let isProMode = false;
 let lastGameWasPro = false;
@@ -333,7 +334,7 @@ function preparePostGame(g: GameState): void {
   lastRunSales = runSales;
   lastRunProfitPct = runSales > 0 ? Math.round((totalProfit / runSales) * 100) : 0;
   lastRunExpenses = runCOGS + runLabor;
-  lastRunSatisfactionPct = totalOrders > 0 ? Math.round((runCompleted / totalOrders) * 100) : 100;
+  lastRunSatisfactionPct = runSatisfactionCount > 0 ? Math.round(runSatisfactionSum / runSatisfactionCount) : 100;
   lastGameScore = runSales;
   lastGameLevel = g.level;
   leaderboardReturn = 'menu'; // always show postgame overlay after leaderboard
@@ -435,6 +436,7 @@ function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFa
   if (n === 1) {
     incrementStat(isCoop ? 'coop_sessions' : 'solo_sessions', 1);
     runSales = 0; runCOGS = 0; runLabor = 0; runWaste = 0; runOverhead = 0; runCompleted = 0; runFailed = 0;
+    runSatisfactionSum = 0; runSatisfactionCount = 0;
     // Small delay so the Play-button click unlocks audio before we switch tracks
     setTimeout(() => playPlaylist(GAME_TRACKS), 80);
   }
@@ -809,7 +811,7 @@ function tickTutorial(gs: GameState, dt: number): void {
 
 function loop(now: number): void {
   const dt = Math.min(now - lastTime, 100); lastTime = now;
-  updateHUDRunStats(runSales, runCOGS, runLabor, runWaste, runOverhead);
+  updateHUDRunStats(runSales, runCOGS, runLabor, runWaste, runOverhead, runSatisfactionSum, runSatisfactionCount);
   // In solo mode, Space bar acts as the primary interact key (clears p2 flag to avoid double-trigger)
   if (!isCoop && input.p2InteractPressed) { input.interactPressed = true; input.p2InteractPressed = false; }
   if (screen === 'name_entry') {
@@ -880,6 +882,7 @@ function loop(now: number): void {
     runSales += gs.levelSales; runCOGS += gs.levelCOGS; runLabor += gs.levelLabor;
     runWaste += gs.levelWaste; runOverhead += OVERHEAD_COST;
     runCompleted += gs.completed; runFailed += gs.failed;
+    runSatisfactionSum += gs.levelSatisfactionSum; runSatisfactionCount += gs.levelSatisfactionCount;
     if (isTutorial && gs.level === 2) {
       isTutorial = false; tutorialStep = 0; tutorialModalActive = false;
       goToNameEntry(gs); requestAnimationFrame(loop); return;
@@ -902,6 +905,7 @@ function loop(now: number): void {
     if (gs.levelEndTimer <= 0) {
       runSales += gs.levelSales; runCOGS += gs.levelCOGS; runLabor += gs.levelLabor;
       runWaste += gs.levelWaste; runCompleted += gs.completed; runFailed += gs.failed;
+      runSatisfactionSum += gs.levelSatisfactionSum; runSatisfactionCount += gs.levelSatisfactionCount;
       recordLevelStats(gs);
       goToGameReport(gs); requestAnimationFrame(loop); return;
     }

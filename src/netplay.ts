@@ -110,6 +110,7 @@ export interface GameSnapshot {
   maxFails: number; thresholdsUnlocked: number;
   levelSales: number; levelCOGS: number; levelLabor: number; levelWaste: number;
   salesByItem: GameState['salesByItem'];
+  levelSatisfactionSum: number; levelSatisfactionCount: number;
 }
 
 let _syncInterval: ReturnType<typeof setInterval> | null = null;
@@ -205,6 +206,7 @@ function buildSnapshot(gs: GameState): GameSnapshot {
     activeMenu: gs.activeMenu, maxFails: gs.maxFails, thresholdsUnlocked: gs.thresholdsUnlocked,
     levelSales: gs.levelSales, levelCOGS: gs.levelCOGS, levelLabor: gs.levelLabor,
     levelWaste: gs.levelWaste, salesByItem: gs.salesByItem,
+    levelSatisfactionSum: gs.levelSatisfactionSum, levelSatisfactionCount: gs.levelSatisfactionCount,
   };
 }
 
@@ -230,5 +232,7 @@ function snapshotToGameState(snap: GameSnapshot): GameState {
     levelSales: snap.levelSales, levelCOGS: snap.levelCOGS, levelLabor: snap.levelLabor,
     levelWaste: snap.levelWaste, salesByItem: snap.salesByItem ?? {},
     tutorialOrderQueue: [],
+    levelSatisfactionSum: snap.levelSatisfactionSum ?? 0,
+    levelSatisfactionCount: snap.levelSatisfactionCount ?? 0,
   };
 }
