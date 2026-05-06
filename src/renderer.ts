@@ -367,16 +367,17 @@ function drawWarmerMenu(gs: GameState, s: Station): void {
 
   for (const pos of layout) {
     const slot = s.slots[pos.idx];
-    const food = slot?.state === 'ready' ? slot.food : null;
+    const isBurned = slot?.state === 'burned';
+    const food = (slot?.state === 'ready' || isBurned) ? slot!.food : null;
     const def = food ? FOOD.get(food) : null;
     const cx = popCX + pos.dx * STEP;
     const cy = popCY + pos.dy * STEP;
     const lx = cx - CW / 2, ly = cy - CH / 2;
 
-    ctx.fillStyle = food ? '#2a1400' : '#111008';
+    ctx.fillStyle = isBurned ? '#2a0000' : food ? '#2a1400' : '#111008';
     ctx.beginPath(); ctx.roundRect(lx, ly, CW, CH, 5); ctx.fill();
-    ctx.strokeStyle = food ? '#c06020' : '#444';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = isBurned ? '#c00' : food ? '#c06020' : '#444';
+    ctx.lineWidth = isBurned ? 2 : 1.5;
     ctx.beginPath(); ctx.roundRect(lx, ly, CW, CH, 5); ctx.stroke();
 
     ctx.fillStyle = '#f84';
@@ -384,11 +385,11 @@ function drawWarmerMenu(gs: GameState, s: Station): void {
     ctx.fillText(pos.arrow, lx + 5, ly + 14);
 
     if (food && def) {
-      ctx.fillStyle = def.color ?? '#aaa';
+      ctx.fillStyle = isBurned ? '#555' : def.color ?? '#aaa';
       ctx.beginPath(); ctx.arc(cx, cy - 2, 13, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1; ctx.stroke();
-      ctx.fillStyle = '#ccd'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
-      ctx.fillText(def.name ?? food, cx, ly + CH - 6);
+      ctx.strokeStyle = isBurned ? '#c00' : 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = isBurned ? '#f44' : '#ccd'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
+      ctx.fillText(isBurned ? 'SPOILED' : (def.name ?? food), cx, ly + CH - 6);
     } else {
       ctx.fillStyle = '#555'; ctx.font = '9px monospace'; ctx.textAlign = 'center';
       ctx.fillText('EMPTY', cx, cy + 4);

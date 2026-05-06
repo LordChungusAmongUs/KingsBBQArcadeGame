@@ -336,6 +336,7 @@ function preparePostGame(g: GameState): void {
   lastRunSatisfactionPct = totalOrders > 0 ? Math.round((runCompleted / totalOrders) * 100) : 100;
   lastGameScore = runSales;
   lastGameLevel = g.level;
+  leaderboardReturn = 'menu'; // always show postgame overlay after leaderboard
   nameChars = ['A','A','A']; nameCursor = 0;
   if (user?.displayName) {
     const initials = user.displayName.slice(0, 3).toUpperCase().replace(/[^A-Z ]/g, 'A');
@@ -493,6 +494,7 @@ function startOnlineGame(lobbyId: string, asHost: boolean): void {
     isCoop = true; hostP2Seq = 0;
     startHostSync(lobbyId, () => gs, handleP2FromNet);
     startLevel(1, STARTING_MONEY);
+    if (gs) render(gs); flushFrame();
   } else {
     incrementStat('coop_sessions', 1);
     guestInteractSeq = 0; lastSentInput = null;
@@ -1231,6 +1233,7 @@ document.getElementById('globalChatInput')!.addEventListener('keydown', e => {
 });
 document.getElementById('lobbyPlaySolo')!.addEventListener('click', () => {
   closeLobbyScreen(); isCoop = false; isProMode = true; startLevel(1, STARTING_MONEY);
+  if (gs) render(gs); flushFrame();
 });
 document.getElementById('lobbyPlayCoop')!.addEventListener('click', startMatchmakingFn);
 document.getElementById('cancelMatchmakingBtn')!.addEventListener('click', cancelMatchmakingFn);
@@ -1251,6 +1254,7 @@ document.getElementById('pgPlayAgain')!.addEventListener('click', () => {
   } else {
     isCoop = lastGameWasCoop;
     startLevel(1, STARTING_MONEY);
+    if (gs) render(gs); flushFrame();
   }
 });
 
@@ -1266,7 +1270,10 @@ document.getElementById('tutorialBtn')!.addEventListener('click', () => {
   // Full input flush — clear all flags including any held by the click/touch that launched this
   flushFrame();
 });
-document.getElementById('startBtn')!.addEventListener('click', () => { isCoop = false; isTutorial = false; isProMode = false; startLevel(1, STARTING_MONEY); });
+document.getElementById('startBtn')!.addEventListener('click', () => {
+  isCoop = false; isTutorial = false; isProMode = false; startLevel(1, STARTING_MONEY);
+  if (gs) render(gs); flushFrame();
+});
 document.getElementById('lobbyBtn')!.addEventListener('click', openLobbyScreen);
 
 function toggleFullscreen(): void {

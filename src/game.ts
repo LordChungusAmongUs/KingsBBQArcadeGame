@@ -100,9 +100,14 @@ export function tickGame(gs: GameState, dt: number): void {
     const noOrders = !gs.orders.some(o => o.status === 'active' || o.status === 'plating');
     if (noOrders) {
       for (const st of gs.stations) {
-        if (st.kind !== 'grill' && st.kind !== 'fryer') continue;
-        for (const slot of st.slots) {
-          if (slot.state === 'cooking' || slot.state === 'ready') slot.state = 'burned';
+        if (st.kind === 'grill' || st.kind === 'fryer') {
+          for (const slot of st.slots) {
+            if (slot.state === 'cooking' || slot.state === 'ready') slot.state = 'burned';
+          }
+        } else if (st.kind === 'warmer') {
+          for (const slot of st.slots) {
+            if (slot.food && slot.state === 'ready') slot.state = 'burned';
+          }
         }
       }
       for (const si of gs.staged) si.spoiled = true;
@@ -252,7 +257,7 @@ function tickMenu(gs: GameState): void {
 
   // ── Warmer: each physical slot maps to one arrow key ──────────────────────
   if (st.kind === 'warmer') {
-    const hasContent = st.slots.some(sl => sl.food);
+    const hasContent = st.slots.some(sl => sl.food && (sl.state === 'ready' || sl.state === 'burned'));
     if (!hasContent && !p.held) { gs.activeMenu = null; return; }
     const slotCount = Math.min(st.slots.length, 4);
     for (const [dir, pressed] of dirs) {
@@ -261,15 +266,16 @@ function tickMenu(gs: GameState): void {
       if (idx < 0 || idx >= slotCount) continue;
       const slot = st.slots[idx];
       if (!slot) continue;
-      if (slot.state === 'ready' && slot.food) {
-        // Pick up from this slot
+      if ((slot.state === 'ready' || slot.state === 'burned') && slot.food) {
+        // Pick up from this slot (burned items can be carried to trash)
         const food = slot.food;
+        const wasBurned = slot.state === 'burned';
         slot.food = null; slot.state = 'empty'; slot.timer = 0;
         if (p.held === null) {
-          p.held = { food, count: 1, burned: false };
-        } else if (p.held.food === food && !p.held.burned && p.held.count < MAX_STACK) {
+          p.held = { food, count: 1, burned: wasBurned };
+        } else if (!wasBurned && p.held.food === food && !p.held.burned && p.held.count < MAX_STACK) {
           p.held.count++;
-        } else if (!p.held.burned) {
+        } else if (!wasBurned && !p.held.burned) {
           // Swap: return held to an empty slot, then pick up
           for (let i = 0; i < p.held.count; i++) {
             const es = st.slots.find(sl => sl.state === 'empty');
@@ -279,9 +285,9 @@ function tickMenu(gs: GameState): void {
           p.held = { food, count: 1, burned: false };
         }
       } else if (slot.state === 'empty' && p.held && !p.held.burned) {
-        // Place one item from hand into this slot
+        // Place one item from hand into this slot (whole_pork allowed)
         const def = FOOD.get(p.held.food);
-        if (def && !def.isRaw && p.held.food !== 'whole_pork') {
+        if (def && !def.isRaw) {
           slot.food = p.held.food; slot.state = 'ready'; slot.timer = 0;
           p.held.count--;
           if (p.held.count <= 0) p.held = null;
