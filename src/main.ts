@@ -699,7 +699,7 @@ const TUTORIAL_STEPS: TutorialStep[] = [
     onEnter: gs => {
       const smoker = gs.stations.find(s => s.kind === 'smoker');
       const empty = smoker?.slots.find(sl => sl.food === null);
-      if (empty) { empty.food = 'whole_pork'; empty.state = 'done'; empty.cookTimer = 0; }
+      if (empty) { empty.food = 'whole_pork'; empty.state = 'ready'; empty.timer = 0; }
     },
     done: gs => gs.stations.some(s => s.kind === 'warmer' && s.slots.filter(sl => sl.food === 'hotdog').length >= 2),
     minLevel: 2 },
