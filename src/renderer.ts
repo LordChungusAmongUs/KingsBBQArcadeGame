@@ -303,17 +303,18 @@ function drawWarmerSlots(s: Station): void {
     const cx = sx + sw / 2;
     const cy = sy + sh / 2;
 
-    ctx.fillStyle = slot.food ? '#2a1800' : '#111008';
+    const isBurned = slot.state === 'burned';
+    ctx.fillStyle = isBurned ? '#2a0000' : slot.food ? '#2a1800' : '#111008';
     ctx.fillRect(sx + 1, sy + 1, sw - 2, sh - 2);
 
     if (slot.food) {
       const def = FOOD.get(slot.food);
-      ctx.fillStyle = def?.color ?? '#aaa';
+      ctx.fillStyle = isBurned ? '#555' : (def?.color ?? '#aaa');
       ctx.beginPath();
       ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = '#f84';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = isBurned ? '#c00' : '#f84';
+      ctx.lineWidth = isBurned ? 2 : 1;
       ctx.strokeRect(sx + 1, sy + 1, sw - 2, sh - 2);
     }
   }
