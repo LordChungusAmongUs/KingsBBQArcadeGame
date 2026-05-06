@@ -9,7 +9,7 @@ const GAME_TRACKS = [
 ];
 import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp, keys } from './input';
 import { createGame, tickGame, resolveCollisions } from './game';
-import { initRenderer, render, resizeRenderer, loadSprites, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu, drawTutorialHint, drawTutorialModal, drawGameReport } from './renderer';
+import { initRenderer, render, resizeRenderer, loadSprites, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu, drawTutorialHint, drawTutorialModal, drawGameReport, updateHUDRunStats } from './renderer';
 import type { GameState, CookSlot } from './types';
 import { LEVELS, STARTING_MONEY, PLAYER_SPEED, STAGED_SPOIL_TIME, OVERHEAD_COST } from './config';
 import { loadLeaderboard, saveEntry, type LeaderboardEntry, type LeaderboardMode } from './leaderboard';
@@ -809,6 +809,7 @@ function tickTutorial(gs: GameState, dt: number): void {
 
 function loop(now: number): void {
   const dt = Math.min(now - lastTime, 100); lastTime = now;
+  updateHUDRunStats(runSales, runCOGS, runLabor, runWaste, runOverhead);
   // In solo mode, Space bar acts as the primary interact key (clears p2 flag to avoid double-trigger)
   if (!isCoop && input.p2InteractPressed) { input.interactPressed = true; input.p2InteractPressed = false; }
   if (screen === 'name_entry') {

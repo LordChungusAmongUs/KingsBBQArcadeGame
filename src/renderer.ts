@@ -32,6 +32,12 @@ function abbrOrder(name: string): [string, string] {
 let ctx: CanvasRenderingContext2D;
 let W = 0, H = 0;
 
+// Run-level financial stats for the HUD (updated each frame from main.ts)
+let _hudRun = { sales: 0, cogs: 0, labor: 0, waste: 0, overhead: 0 };
+export function updateHUDRunStats(sales: number, cogs: number, labor: number, waste: number, overhead: number): void {
+  _hudRun = { sales, cogs, labor, waste, overhead };
+}
+
 // ─── Sprite cache ─────────────────────────────────────────────────────────────
 
 const _sprites: Partial<Record<string, HTMLImageElement>> = {};
@@ -810,7 +816,7 @@ function drawHUD(gs: GameState): void {
 
   // Semi-transparent backing panel
   ctx.fillStyle = 'rgba(0,0,0,0.40)';
-  ctx.fillRect(hudX - 183, 125, 188, 310);
+  ctx.fillRect(hudX - 183, 125, 188, 420);
 
   ctx.textAlign = 'right';
   let y = 178;
@@ -854,6 +860,43 @@ function drawHUD(gs: GameState): void {
   ctx.font = '13px monospace';
   ctx.fillStyle = '#8f8';
   ctx.fillText(`✓ ${gs.completed} served`, hudX, y);
+  y += 20;
+
+  // ── Financial breakdown ───────────────────────────────────────────────────
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(hudX - 175, y); ctx.lineTo(hudX - 8, y); ctx.stroke();
+  y += 12;
+
+  const totSales  = _hudRun.sales  + gs.levelSales;
+  const totCOGS   = _hudRun.cogs   + gs.levelCOGS;
+  const totLabor  = _hudRun.labor  + gs.levelLabor;
+  const totWaste  = _hudRun.waste  + gs.levelWaste;
+  const totOverhead = _hudRun.overhead + OVERHEAD_COST; // project current level's overhead
+  const totProfit = totSales - totCOGS - totLabor - totWaste - totOverhead;
+
+  const pct = (n: number) => totSales > 0 ? `${Math.round((n / totSales) * 100)}%` : '--';
+  const dollar = (n: number) => {
+    const abs = Math.abs(n); const sign = n < 0 ? '-' : '';
+    return `${sign}$${(abs / 100).toFixed(2)}`;
+  };
+
+  const rows: [string, string, string][] = [
+    ['SALES',   dollar(totSales),     '#ffd'],
+    ['LABOR',   pct(totLabor),        '#f84'],
+    ['COGS',    pct(totCOGS),         '#fb8'],
+    ['WASTE',   pct(totWaste),        '#f66'],
+    ['O.HEAD',  pct(totOverhead),     '#aaa'],
+    ['PROFIT',  pct(totProfit),       totProfit >= 0 ? '#4f4' : '#f44'],
+  ];
+
+  ctx.font = '11px monospace';
+  for (const [label, val, color] of rows) {
+    ctx.fillStyle = '#666'; ctx.textAlign = 'left';
+    ctx.fillText(label, hudX - 175, y);
+    ctx.fillStyle = color; ctx.textAlign = 'right';
+    ctx.fillText(val, hudX - 8, y);
+    y += 17;
+  }
 
   // Overtime warning
   if (gs.levelTimer <= 0 && gs.phase === 'playing') {
