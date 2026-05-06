@@ -992,14 +992,17 @@ function openLobbyScreen(): void {
   lobbyScreen.style.display = 'flex';
   if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
   (window.screen.orientation as any)?.lock?.('landscape').catch(() => {});
+  // 1 PLAYER is always available; co-op + social features require sign-in
+  document.getElementById('lobbyToolbar')!.style.display = 'flex';
+  const coopBtn = document.getElementById('lobbyPlayCoop') as HTMLButtonElement;
+  coopBtn.disabled = !user;
+  coopBtn.title    = user ? '' : 'Sign in to play co-op';
   if (!user) {
     document.getElementById('lobbyAuthRequired')!.style.display = 'flex';
-    document.getElementById('lobbyToolbar')!.style.display      = 'none';
     document.getElementById('lobbyContent')!.style.display      = 'none';
     return;
   }
   document.getElementById('lobbyAuthRequired')!.style.display = 'none';
-  document.getElementById('lobbyToolbar')!.style.display      = 'flex';
   document.getElementById('lobbyContent')!.style.display      = 'flex';
   renderMatchmakingUI();
 
