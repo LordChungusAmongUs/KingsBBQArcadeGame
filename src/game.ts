@@ -128,7 +128,9 @@ export function tickGame(gs: GameState, dt: number): void {
 
     const hasBadFood = gs.staged.some(si => si.spoiled) ||
       gs.stations.some(st => st.slots.some(sl => sl.state === 'burned')) ||
-      gs.chopOutputSpoiled;
+      gs.chopOutputSpoiled ||
+      gs.player.held?.burned === true ||
+      gs.player2?.held?.burned === true;
     const stillWaiting = !noOrders || hasBadFood;
     if (!stillWaiting) {
       if (gs.failed >= gs.maxFails) {
