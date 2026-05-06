@@ -49,6 +49,8 @@ export function createGame(level: number, carryScore = 0, coop = false, smokerSl
     chopStored: 0,
     chopProgress: 0,
     chopOutput: 0,
+    chopOutputTimer: 0,
+    chopOutputSpoiled: false,
     activeMenu: null,
     maxFails: BASE_MAX_FAILS + thresholdsUnlocked,
     thresholdsUnlocked,
@@ -104,11 +106,12 @@ export function tickGame(gs: GameState, dt: number): void {
         }
       }
       for (const si of gs.staged) si.spoiled = true;
-      gs.chopStored = 0; gs.chopProgress = 0; gs.chopOutput = 0;
+      gs.chopStored = 0; gs.chopProgress = 0; gs.chopOutput = 0; gs.chopOutputTimer = 0; gs.chopOutputSpoiled = false;
     }
 
     const hasBadFood = gs.staged.some(si => si.spoiled) ||
-      gs.stations.some(st => st.slots.some(sl => sl.state === 'burned'));
+      gs.stations.some(st => st.slots.some(sl => sl.state === 'burned')) ||
+      gs.chopOutputSpoiled;
     const stillWaiting = !noOrders || hasBadFood;
     if (!stillWaiting) {
       if (gs.failed >= gs.maxFails) {
@@ -128,6 +131,10 @@ export function tickGame(gs: GameState, dt: number): void {
   tickCooking(gs.stations, dt, onCookingDone);
   tickSmoker(gs);
   tickChop(gs, dt);
+  if (gs.chopOutput > 0 && !gs.chopOutputSpoiled) {
+    gs.chopOutputTimer += dt;
+    if (gs.chopOutputTimer >= STAGED_SPOIL_TIME) gs.chopOutputSpoiled = true;
+  }
   tickMenu(gs);
   tickPlayer(gs, dt);
   if (gs.coop && gs.player2) tickPlayer2(gs, dt);
@@ -369,6 +376,7 @@ function tickChop(gs: GameState, dt: number): void {
       gs.chopStored--;
       gs.chopOutput += 4;
       gs.chopProgress = 0;
+      gs.chopOutputTimer = 0; gs.chopOutputSpoiled = false;
       awardXP(1); incrementStat('bbq_chops', 1);
     }
   }
@@ -610,11 +618,16 @@ function doInteract(gs: GameState, playerNum: 1 | 2 = 1): void {
       gs.chopProgress = 1;
       return;
     }
-    // Step 3: pick up output pork
-    if (gs.chopOutput > 0 && (p.held === null || (p.held.food === 'pork' && !p.held.burned && p.held.count < MAX_STACK))) {
-      if (p.held === null) p.held = { food: 'pork', count: 1, burned: false };
-      else p.held.count++;
-      gs.chopOutput--;
+    // Step 3: pick up output pork (spoiled pork gives burned item for trashing)
+    if (gs.chopOutput > 0) {
+      if (gs.chopOutputSpoiled) {
+        if (p.held === null) { p.held = { food: 'pork', count: 1, burned: true }; gs.chopOutput--; }
+      } else if (p.held === null || (p.held.food === 'pork' && !p.held.burned && p.held.count < MAX_STACK)) {
+        if (p.held === null) p.held = { food: 'pork', count: 1, burned: false };
+        else p.held.count++;
+        gs.chopOutput--;
+      }
+      if (gs.chopOutput === 0) { gs.chopOutputTimer = 0; gs.chopOutputSpoiled = false; }
     }
     return;
   }

@@ -694,23 +694,39 @@ const TUTORIAL_STEPS: TutorialStep[] = [
     sub: 'Place on CHOP TABLE (bottom left). Tap or SPACE again to chop it up.',
     done: gs => gs.player.held?.food === 'pork',
     minLevel: 2 },
-  { title: 'GET HOT DOGS READY',
-    sub: 'Pick up 2 RAW HOT DOGS from COOLER. Grill them and move to the WARMER BOX. Extra pork just finished in the SMOKER too — pick it up and chop it for the BBQ Plate order!',
+  { title: 'HOTDOG ORDER IN!',
+    sub: 'An order came in! You can carry 2 of the same item — get 2 RAW HOT DOGS from COOLER and onto the GRILL!',
+    onEnter: gs => { gs.tutorialOrderQueue.push('Hotdog'); gs.nextOrderIn = 0; },
+    done: gs => gs.stations.some(s => s.kind === 'grill' &&
+      s.slots.filter(sl => sl.food === 'raw_hotdog' || sl.food === 'hotdog').length >= 2),
+    minLevel: 2 },
+  { title: 'USE THE WARMER BOX',
+    sub: 'Serve one hotdog for the order. Put the second in the WARMER BOX — food stored there never spoils!',
+    done: gs => gs.stations.some(s => s.kind === 'warmer' && s.slots.some(sl => sl.food === 'hotdog')) &&
+                gs.completed > tutorialBaseCompleted,
+    minLevel: 2 },
+  { title: 'BBQ ORDERS IN!',
+    sub: 'BBQ Sand. and BBQ Plate just came in! Use pork from the CHOP TABLE — pick up 2 portions for the BBQ Plate.',
+    onEnter: gs => { gs.tutorialOrderQueue.push('BBQ Sand.', 'BBQ Plate'); gs.nextOrderIn = 0; },
+    done: gs => gs.completed > tutorialBaseCompleted + 2,
+    minLevel: 2 },
+  { title: 'ANOTHER HOTDOG!',
+    sub: 'One more hotdog order — grab it from the WARMER BOX and deliver!',
     onEnter: gs => {
-      const smoker = gs.stations.find(s => s.kind === 'smoker');
-      const empty = smoker?.slots.find(sl => sl.food === null);
-      if (empty) { empty.food = 'whole_pork'; empty.state = 'ready'; empty.timer = 0; }
+      gs.tutorialOrderQueue.push('Hotdog'); gs.nextOrderIn = 0;
+      if (gs.chopOutput > 0) gs.chopOutputSpoiled = true;
     },
-    done: gs => gs.stations.some(s => s.kind === 'warmer' && s.slots.filter(sl => sl.food === 'hotdog').length >= 2),
+    done: gs => gs.completed > tutorialBaseCompleted + 3,
     minLevel: 2 },
-  { title: '4 ORDERS ARE IN!',
-    sub: 'BBQ Sand., BBQ Plate, Hotdog+Fry, Hotdog+Pups! Start with the BBQ orders using your pulled pork.',
-    onEnter: gs => { gs.tutorialOrderQueue.push('BBQ Sand.', 'BBQ Plate', 'Hotdog+Sm Fry', 'Hotdog+Sm Pup'); gs.nextOrderIn = 0; },
-    done: gs => gs.completed > tutorialBaseCompleted + 1,
+  { title: 'PORK WENT BAD!',
+    sub: 'The leftover pork on the CHOP TABLE spoiled! Pick it up and toss it in the TRASH.',
+    done: gs => gs.chopOutput === 0,
     minLevel: 2 },
-  { title: 'FINISH THE RUSH!',
-    sub: 'Grab hotdogs from the WARMER and fry the sides to complete the combos. Deliver all 4!',
-    done: gs => gs.orders.length === 0 && gs.tutorialOrderQueue.length === 0,
+  { title: 'CLOSING TIME!',
+    sub: 'End of shift! All extra food is discarded — except pork in the smoker. Clean it up!',
+    onEnter: gs => { gs.levelTimer = 0; },
+    done: gs => !gs.stations.some(st => st.slots.some(sl => sl.state === 'burned')) &&
+                !gs.staged.some(si => si.spoiled) && !gs.chopOutputSpoiled,
     minLevel: 2 },
 ];
 

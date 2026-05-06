@@ -225,6 +225,7 @@ function snapshotToGameState(snap: GameSnapshot): GameState {
     phase: snap.phase as GameState['phase'],
     levelEndTimer: snap.levelEndTimer, prepTimer: snap.prepTimer, laborAccum: 0,
     chopStored: snap.chopStored, chopProgress: snap.chopProgress, chopOutput: snap.chopOutput,
+    chopOutputTimer: 0, chopOutputSpoiled: false,
     activeMenu: snap.activeMenu ?? null, maxFails: snap.maxFails, thresholdsUnlocked: snap.thresholdsUnlocked,
     levelSales: snap.levelSales, levelCOGS: snap.levelCOGS, levelLabor: snap.levelLabor,
     levelWaste: snap.levelWaste, salesByItem: snap.salesByItem ?? {},

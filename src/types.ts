@@ -90,6 +90,8 @@ export interface GameState {
   chopStored: number;     // whole_pork pieces sitting on chop table (0 or 1)
   chopProgress: number;   // ms into 2000ms chop (>0 means actively chopping)
   chopOutput: number;     // pork portions ready on chop table
+  chopOutputTimer: number;   // ms since chopOutput was last produced; drives spoil
+  chopOutputSpoiled: boolean; // true when chopOutput timer has expired
   activeMenu: { stationId: string; owner: 1 | 2 } | null;
   player2: Player | null;
   coop: boolean;

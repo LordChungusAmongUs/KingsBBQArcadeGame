@@ -151,11 +151,19 @@ function drawStations(gs: GameState): void {
     if (s.kind === 'chop') {
       const cx = s.x + s.w / 2;
       if (gs.chopOutput > 0) {
+        const spoiled = gs.chopOutputSpoiled;
         const def = FOOD.get('pork');
-        ctx.fillStyle = def?.color ?? '#c8806a';
+        ctx.fillStyle = spoiled ? '#c44' : (def?.color ?? '#c8806a');
         ctx.beginPath(); ctx.arc(cx, s.y + s.h / 2 - 6, 10, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
-        ctx.fillText(`×${gs.chopOutput}`, cx, s.y + s.h / 2 + 10);
+        ctx.fillText(spoiled ? 'BAD!' : `×${gs.chopOutput}`, cx, s.y + s.h / 2 + 10);
+        if (!spoiled && gs.chopOutputTimer > 0) {
+          const frac = Math.min(1, gs.chopOutputTimer / STAGED_SPOIL_TIME);
+          const barW = s.w - 8;
+          ctx.fillStyle = '#222'; ctx.fillRect(s.x + 4, s.y + s.h - 12, barW, 4);
+          ctx.fillStyle = frac > 0.6 ? '#f44' : frac > 0.3 ? '#fa0' : '#8f4';
+          ctx.fillRect(s.x + 4, s.y + s.h - 12, barW * frac, 4);
+        }
       } else if (gs.chopStored > 0) {
         const def = FOOD.get('whole_pork');
         ctx.fillStyle = def?.color ?? '#b06050';
