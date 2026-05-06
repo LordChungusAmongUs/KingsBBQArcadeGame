@@ -1314,8 +1314,8 @@ export function drawLeaderboard(
   ctx.fillStyle = '#654'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'left';
   ctx.fillText('RNK', px + 28, y);
   ctx.fillText('NAME', px + 90, y);
-  ctx.fillText('SCORE', px + 185, y);
-  ctx.fillText('LVL', px + 360, y);
+  ctx.fillText('SALES', px + 185, y);
+  ctx.fillText('PROFIT%', px + 365, y);
   y += 12;
   ctx.strokeStyle = '#321'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(px + 20, y); ctx.lineTo(px + panelW - 20, y); ctx.stroke(); y += 12;
@@ -1327,7 +1327,8 @@ export function drawLeaderboard(
 
   for (let i = 0; i < 10; i++) {
     const e = entries[i];
-    const isHL = e && e.score === highlightScore && !highlightFound;
+    const eSales = e ? (e.sales ?? e.score) : 0;
+    const isHL = e && eSales === highlightScore && !highlightFound;
     if (isHL) highlightFound = true;
 
     if (isHL) {
@@ -1342,9 +1343,11 @@ export function drawLeaderboard(
 
     if (e) {
       ctx.fillText(e.name, px + 90, y);
-      const ms = e.score < 0 ? `-$${(Math.abs(e.score) / 100).toFixed(2)}` : `$${(e.score / 100).toFixed(2)}`;
+      const sv = e.sales ?? e.score;
+      const ms = sv < 0 ? `-$${(Math.abs(sv) / 100).toFixed(2)}` : `$${(sv / 100).toFixed(2)}`;
       ctx.fillText(ms, px + 185, y);
-      ctx.fillText(String(e.level), px + 360, y);
+      const pct = e.profitPct !== undefined ? `${e.profitPct}%` : '—';
+      ctx.fillText(pct, px + 365, y);
       if (isHL) {
         ctx.fillStyle = '#f84'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'right';
         ctx.fillText('◄ YOU', px + panelW - 18, y);
@@ -1362,13 +1365,90 @@ export function drawLeaderboard(
     ctx.beginPath(); ctx.moveTo(px + 20, y); ctx.lineTo(px + panelW - 20, y); ctx.stroke(); y += 14;
     const ms = highlightScore < 0 ? `-$${(Math.abs(highlightScore) / 100).toFixed(2)}` : `$${(highlightScore / 100).toFixed(2)}`;
     ctx.fillStyle = '#665'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
-    ctx.fillText(`your score: ${ms} — not in top 10`, cx, y);
+    ctx.fillText(`your sales: ${ms} — not in top 10`, cx, y);
   }
 
   // Footer
   ctx.fillStyle = blink ? '#4af' : '#268';
   ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
   ctx.fillText('E or SPACE to continue', cx, py + panelH - 20);
+}
+
+// ─── Game-over total report ───────────────────────────────────────────────────
+
+export function drawGameReport(
+  runSales: number, runCOGS: number, runLabor: number,
+  runWaste: number, runOverhead: number, runCompleted: number,
+  level: number,
+): void {
+  ctx.fillStyle = 'rgba(0,0,0,0.93)';
+  ctx.fillRect(0, 0, W, H);
+
+  const panelW = 480, panelH = 420;
+  const px = (W - panelW) / 2, py = (H - panelH) / 2;
+  ctx.fillStyle = '#060402';
+  ctx.fillRect(px, py, panelW, panelH);
+  ctx.strokeStyle = '#f84'; ctx.lineWidth = 2;
+  ctx.strokeRect(px, py, panelW, panelH);
+  ctx.strokeStyle = '#432'; ctx.lineWidth = 1;
+  ctx.strokeRect(px + 4, py + 4, panelW - 8, panelH - 8);
+
+  const cx = px + panelW / 2;
+  let y = py + 38;
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#f84';
+  ctx.font = 'bold 20px monospace';
+  ctx.fillText('★  SEASON TOTAL REPORT  ★', cx, y); y += 26;
+
+  ctx.strokeStyle = '#432'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(px + 20, y); ctx.lineTo(px + panelW - 20, y); ctx.stroke(); y += 22;
+
+  const totalExpenses = runCOGS + runLabor + runWaste + runOverhead;
+  const totalProfit = runSales - totalExpenses;
+  const profitPct = runSales > 0 ? Math.round((totalProfit / runSales) * 100) : 0;
+
+  const rows: Array<[string, number, string]> = [
+    ['TOTAL SALES',  runSales,     '#fff'],
+    ['FOOD COSTS',   -runCOGS,     '#f88'],
+    ['LABOR',        -runLabor,    '#fa8'],
+    ['WASTE',        -runWaste,    '#f86'],
+    ['OVERHEAD',     -runOverhead, '#f64'],
+    ['NET PROFIT',   totalProfit,  totalProfit >= 0 ? '#4f8' : '#f44'],
+  ];
+
+  for (const [label, value, color] of rows) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#998'; ctx.font = '13px monospace';
+    ctx.fillText(label, px + 60, y);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = color;
+    const sign = value < 0 ? '-$' : '$';
+    ctx.fillText(`${sign}${(Math.abs(value) / 100).toFixed(2)}`, px + panelW - 60, y);
+    y += 26;
+  }
+
+  ctx.strokeStyle = '#321'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(px + 20, y); ctx.lineTo(px + panelW - 20, y); ctx.stroke(); y += 18;
+
+  const metaRows: Array<[string, string, string]> = [
+    ['PROFIT MARGIN', `${profitPct}%`, profitPct >= 20 ? '#4f8' : profitPct >= 0 ? '#ff8' : '#f44'],
+    ['ORDERS SERVED', String(runCompleted), '#fff'],
+    ['STAGES REACHED', String(level), '#fff'],
+  ];
+  for (const [label, val, color] of metaRows) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#998'; ctx.font = '13px monospace';
+    ctx.fillText(label, px + 60, y);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = color;
+    ctx.fillText(val, px + panelW - 60, y); y += 22;
+  }
+
+  const blink = Math.floor(Date.now() / 500) % 2 === 0;
+  ctx.fillStyle = blink ? '#4af' : '#268';
+  ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('E or SPACE to enter leaderboard', cx, py + panelH - 20);
 }
 
 // ─── Tutorial overlay ─────────────────────────────────────────────────────────

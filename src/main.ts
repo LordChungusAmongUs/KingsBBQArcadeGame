@@ -9,9 +9,9 @@ const GAME_TRACKS = [
 ];
 import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp, keys } from './input';
 import { createGame, tickGame, resolveCollisions } from './game';
-import { initRenderer, render, resizeRenderer, loadSprites, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu, drawTutorialHint, drawTutorialModal } from './renderer';
+import { initRenderer, render, resizeRenderer, loadSprites, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu, drawTutorialHint, drawTutorialModal, drawGameReport } from './renderer';
 import type { GameState, CookSlot } from './types';
-import { LEVELS, STARTING_MONEY, PLAYER_SPEED, STAGED_SPOIL_TIME } from './config';
+import { LEVELS, STARTING_MONEY, PLAYER_SPEED, STAGED_SPOIL_TIME, OVERHEAD_COST } from './config';
 import { loadLeaderboard, saveEntry, type LeaderboardEntry, type LeaderboardMode } from './leaderboard';
 import { initAuth, signInWithGoogle, signOutUser, checkRedirectResult } from './auth';
 import type { User } from 'firebase/auth';
@@ -175,7 +175,7 @@ let tutorialBaseCompleted = 0;
 let tutorialPlayerMoved = false;
 let tutorialModalActive = false;
 
-type Screen = 'game' | 'name_entry' | 'leaderboard';
+type Screen = 'game' | 'name_entry' | 'leaderboard' | 'game_report';
 let screen: Screen = 'game';
 let isPaused = false, pauseMenuIdx = 0;
 let pauseSubScreen: 'controls' | 'restaurant_menu' | null = null;
@@ -188,6 +188,8 @@ let leaderboardEntries: LeaderboardEntry[] = [];
 let lastGameWasCoop = false;
 let lastGameWasOnline = false;
 let lastGameScore = 0, lastGameLevel = 1;
+let runSales = 0, runCOGS = 0, runLabor = 0, runWaste = 0, runOverhead = 0, runCompleted = 0;
+let lastRunSales = 0, lastRunProfitPct = 0, lastRunExpenses = 0;
 let isProMode = false;
 let lastGameWasPro = false;
 let pgFocusIdx = 0;
@@ -319,22 +321,35 @@ async function updateMenuLeaderboard(): Promise<void> {
 
 // ─── Name entry ───────────────────────────────────────────────────────────────
 
-function goToNameEntry(g: GameState): void {
+function preparePostGame(g: GameState): void {
   lastGameWasCoop = isCoop;
   lastGameWasOnline = isOnlineGame;
   lastGameWasPro = isProMode;
   if (isOnlineGame && isOnlineHost) cleanupOnlineGame();
-  recordLevelStats(g);
   flushSession().catch(console.error);
-  lastGameScore = g.score; lastGameLevel = g.level;
+  const totalExpenses = runCOGS + runLabor + runWaste + runOverhead;
+  const totalProfit = runSales - totalExpenses;
+  lastRunSales = runSales;
+  lastRunProfitPct = runSales > 0 ? Math.round((totalProfit / runSales) * 100) : 0;
+  lastRunExpenses = runCOGS + runLabor;
+  lastGameScore = runSales;
+  lastGameLevel = g.level;
   nameChars = ['A','A','A']; nameCursor = 0;
-  screen = 'name_entry';
-  // Pre-fill from Google display name if available
   if (user?.displayName) {
     const initials = user.displayName.slice(0, 3).toUpperCase().replace(/[^A-Z ]/g, 'A');
     for (let i = 0; i < 3; i++) nameChars[i] = CHARS.includes(initials[i]) ? initials[i] : 'A';
   }
+}
+
+function goToNameEntry(g: GameState): void {
+  preparePostGame(g);
   showMobileNameEntry();
+  screen = 'name_entry';
+}
+
+function goToGameReport(g: GameState): void {
+  preparePostGame(g);
+  screen = 'game_report';
 }
 
 function handleNameEntry(): void {
@@ -349,7 +364,7 @@ function submitName(): void {
   const name = nameChars.join('').trim() || 'AAA';
   hideMobileNameEntry();
   leaderboardMode = lastGameWasPro ? 'pro' : 'rookie';
-  leaderboardEntries = saveEntry(name, lastGameScore, lastGameLevel, leaderboardMode);
+  leaderboardEntries = saveEntry(name, lastGameScore, lastGameLevel, lastRunProfitPct, lastRunExpenses, leaderboardMode);
   if (user) saveCloudScore(user.uid, user.displayName??'', user.photoURL??'', name, lastGameScore, lastGameLevel).catch(()=>{});
   enterLeaderboard();
 }
@@ -416,6 +431,7 @@ function hideMobileNameEntry(): void {
 function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0): void {
   if (n === 1) {
     incrementStat(isCoop ? 'coop_sessions' : 'solo_sessions', 1);
+    runSales = 0; runCOGS = 0; runLabor = 0; runWaste = 0; runOverhead = 0; runCompleted = 0;
     // Small delay so the Play-button click unlocks audio before we switch tracks
     setTimeout(() => playPlaylist(GAME_TRACKS), 80);
   }
@@ -680,6 +696,12 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   { title: 'TIP: BURNED FOOD',
     sub: 'Red slot = burned! Grab it, walk to TRASH (bottom-right corner), drop it.',
     timedMs: 5000 },
+  { title: 'YOUR SCORE = PROFIT',
+    sub: 'Score = sales minus food costs, labor (1¢/sec ticking), and $20 end-of-shift overhead. Watch the HUD!',
+    timedMs: 6000 },
+  { title: 'CUSTOMER STARS',
+    sub: 'Stars = satisfaction. Each failed or expired order costs 1 star. Lose all 5 = GAME OVER! Never let orders time out!',
+    timedMs: 6000 },
   { title: 'CLOSING TIME!',
     sub: 'At closing time all extra food is discarded — except pork in the smoker. Clean it up!',
     onEnter: gs => { gs.levelTimer = 0; },
@@ -727,6 +749,10 @@ const TUTORIAL_STEPS: TutorialStep[] = [
     onEnter: gs => { gs.levelTimer = 0; },
     done: gs => !gs.stations.some(st => st.slots.some(sl => sl.state === 'burned')) &&
                 !gs.staged.some(si => si.spoiled) && !gs.chopOutputSpoiled,
+    minLevel: 2 },
+  { title: 'END OF SHIFT REPORT',
+    sub: 'After every shift: a financial report shows sales, food costs, labor, overhead, waste, and net profit. After game over you\'ll see the SEASON TOTAL — that\'s your leaderboard rank!',
+    timedMs: 8000,
     minLevel: 2 },
 ];
 
@@ -790,6 +816,16 @@ function loop(now: number): void {
     if (gs) render(gs); drawLeaderboard(leaderboardEntries, lastGameScore, leaderboardMode);
     flushFrame(); requestAnimationFrame(loop); return;
   }
+  if (screen === 'game_report') {
+    if (input.interactPressed || input.p2InteractPressed) {
+      showMobileNameEntry();
+      screen = 'name_entry';
+      flushFrame(); requestAnimationFrame(loop); return;
+    }
+    if (gs) render(gs);
+    drawGameReport(lastRunSales, runCOGS, runLabor, runWaste, runOverhead, runCompleted, lastGameLevel);
+    flushFrame(); requestAnimationFrame(loop); return;
+  }
   // Post-game overlay — arrow key navigation
   if (document.getElementById('postgameOverlay')!.style.display !== 'none') {
     const pgBtns = (['pgPlayAgain', 'pgLobby', 'pgMainMenu'] as const)
@@ -836,6 +872,8 @@ function loop(now: number): void {
   if (isTutorial) tickTutorial(gs, dt);
   if (gs.phase === 'level_end' && (gs.levelEndTimer <= 0 || input.p2InteractPressed || input.interactPressed)) {
     recordLevelStats(gs);
+    runSales += gs.levelSales; runCOGS += gs.levelCOGS; runLabor += gs.levelLabor;
+    runWaste += gs.levelWaste; runOverhead += OVERHEAD_COST; runCompleted += gs.completed;
     if (isTutorial && gs.level === 2) {
       isTutorial = false; tutorialStep = 0; tutorialModalActive = false;
       goToNameEntry(gs); requestAnimationFrame(loop); return;
@@ -855,7 +893,12 @@ function loop(now: number): void {
     goToNameEntry(gs); requestAnimationFrame(loop); return;
   }
   if (gs.phase === 'game_over') {
-    if (gs.levelEndTimer <= 0) { goToNameEntry(gs); requestAnimationFrame(loop); return; }
+    if (gs.levelEndTimer <= 0) {
+      runSales += gs.levelSales; runCOGS += gs.levelCOGS; runLabor += gs.levelLabor;
+      runWaste += gs.levelWaste; runCompleted += gs.completed;
+      recordLevelStats(gs);
+      goToGameReport(gs); requestAnimationFrame(loop); return;
+    }
     render(gs);
     if (isTutorial) drawTutorialHint(tutorialStep, TUTORIAL_STEPS);
     flushFrame(); requestAnimationFrame(loop); return;
