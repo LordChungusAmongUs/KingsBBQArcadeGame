@@ -67,6 +67,15 @@ export function buildStations(): Station[] {
       slots: Array.from({ length: 4 }, () => slot()),
     },
 
+    // ── Warmer (left wall, below smoker) ─────────────────────────────────────
+    {
+      id: 'warmer', kind: 'warmer',
+      x: KX - 130, y: KY + 211, w: 120, h: 90,
+      label: 'WARMER', color: '#7a4020',
+      slotRows: 2,
+      slots: Array.from({ length: 4 }, () => slot()),
+    },
+
     // ── Front area ─────────────────────────────────────────────────────────────
     {
       id: 'chop', kind: 'chop',

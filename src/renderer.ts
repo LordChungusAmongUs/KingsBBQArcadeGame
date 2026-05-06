@@ -137,7 +137,15 @@ function drawStations(gs: GameState): void {
     ctx.fillText(s.label, s.x + s.w / 2, s.y + 14);
 
     // Cook slots
-    if (s.slots.length > 0) drawCookSlots(s);
+    if (s.kind === 'warmer') {
+      ctx.strokeStyle = '#c06020';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(s.x, s.y, s.w, s.h);
+      drawWarmerSlots(s);
+      if (gs.activeMenu?.stationId === s.id) drawWarmerMenu(gs, s);
+    } else if (s.slots.length > 0) {
+      drawCookSlots(s);
+    }
 
     // Chop table — three states: empty, loaded (press E to chop), chopping, output ready
     if (s.kind === 'chop') {
@@ -263,6 +271,40 @@ function slotBg(slot: CookSlot): string {
   return '#1a1a1a';
 }
 
+function drawWarmerSlots(s: Station): void {
+  const rows = s.slotRows ?? 2;
+  const cols = Math.ceil(s.slots.length / rows);
+  const PAD = 6, HEADER = 16;
+  const sw = Math.floor((s.w - PAD * 2) / cols);
+  const sh = Math.floor((s.h - HEADER - PAD) / rows);
+  const dotR = Math.max(4, Math.floor(Math.min(sw, sh) * 0.3));
+
+  for (let i = 0; i < s.slots.length; i++) {
+    const slot = s.slots[i];
+    if (!slot) continue;
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const sx = s.x + PAD + col * sw;
+    const sy = s.y + HEADER + row * sh;
+    const cx = sx + sw / 2;
+    const cy = sy + sh / 2;
+
+    ctx.fillStyle = slot.food ? '#2a1800' : '#111008';
+    ctx.fillRect(sx + 1, sy + 1, sw - 2, sh - 2);
+
+    if (slot.food) {
+      const def = FOOD.get(slot.food);
+      ctx.fillStyle = def?.color ?? '#aaa';
+      ctx.beginPath();
+      ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#f84';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sx + 1, sy + 1, sw - 2, sh - 2);
+    }
+  }
+}
+
 // Direction → slot-index mapping (mirrors game.ts logic)
 function menuSlotLayout(count: number): Array<{ idx: number; dx: number; dy: number; arrow: string }> {
   if (count === 1) return [{ idx: 0, dx: 0, dy: -1, arrow: '↑' }];
@@ -281,6 +323,73 @@ function menuSlotLayout(count: number): Array<{ idx: number; dx: number; dy: num
     { idx: 2, dx:  1, dy:  0, arrow: '→' },
     { idx: 3, dx:  0, dy:  1, arrow: '↓' },
   ];
+}
+
+function drawWarmerMenu(gs: GameState, s: Station): void {
+  const uniqueFoods = [...new Set(s.slots.filter(sl => sl.food && sl.state === 'ready').map(sl => sl.food!))] as import('./types').FoodId[];
+  if (uniqueFoods.length === 0) return;
+
+  const layout = menuSlotLayout(uniqueFoods.length);
+  const CW = 72, CH = 58, STEP = 72;
+  // Anchor popup to the right of the station so it doesn't clip the left edge
+  const popCX = s.x + s.w + 90;
+  const popCY = s.y + s.h / 2;
+
+  const xs = layout.map(p => popCX + p.dx * STEP);
+  const ys = layout.map(p => popCY + p.dy * STEP);
+  const bx = Math.min(...xs) - CW / 2 - 14;
+  const by = Math.min(...ys) - CH / 2 - 14;
+  const bw = Math.max(...xs) - Math.min(...xs) + CW + 28;
+  const bh = Math.max(...ys) - Math.min(...ys) + CH + 28;
+
+  ctx.fillStyle = 'rgba(18,8,0,0.94)';
+  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 8); ctx.fill();
+  ctx.strokeStyle = '#c06020'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 8); ctx.stroke();
+
+  ctx.fillStyle = '#f84'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('WARMER', bx + bw / 2, by + 14);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+  for (const pos of layout) {
+    ctx.beginPath();
+    ctx.moveTo(popCX, popCY);
+    ctx.lineTo(popCX + pos.dx * STEP, popCY + pos.dy * STEP);
+    ctx.stroke();
+  }
+
+  for (const pos of layout) {
+    const food = uniqueFoods[pos.idx];
+    const def = FOOD.get(food);
+    const count = s.slots.filter(sl => sl.food === food && sl.state === 'ready').length;
+    const cx = popCX + pos.dx * STEP;
+    const cy = popCY + pos.dy * STEP;
+    const lx = cx - CW / 2, ly = cy - CH / 2;
+
+    ctx.fillStyle = '#2a1400';
+    ctx.beginPath(); ctx.roundRect(lx, ly, CW, CH, 5); ctx.fill();
+    ctx.strokeStyle = '#c06020'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.roundRect(lx, ly, CW, CH, 5); ctx.stroke();
+
+    ctx.fillStyle = '#f84';
+    ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left';
+    ctx.fillText(pos.arrow, lx + 5, ly + 14);
+
+    ctx.fillStyle = def?.color ?? '#aaa';
+    ctx.beginPath(); ctx.arc(cx, cy - 2, 13, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1; ctx.stroke();
+
+    if (count > 1) {
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'right';
+      ctx.fillText(`×${count}`, lx + CW - 4, ly + 14);
+    }
+
+    ctx.fillStyle = '#ccd'; ctx.font = '8px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(def?.name ?? food, cx, ly + CH - 6);
+  }
+
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.beginPath(); ctx.arc(popCX, popCY, 5, 0, Math.PI * 2); ctx.fill();
 }
 
 function drawCoolerFreezer(gs: GameState, s: Station, highlight: boolean, highlight2 = false): void {
@@ -519,7 +628,7 @@ function drawPrepTable(gs: GameState, s: Station): void {
 
 // ─── Player ───────────────────────────────────────────────────────────────────
 
-const SPRITE_W = 64, SPRITE_H = 72;
+const SPRITE_W = 128, SPRITE_H = 144;
 
 function facingDir(angle: number): 'up' | 'down' | 'left' | 'right' {
   if (Math.abs(angle) < Math.PI / 4) return 'right';
@@ -527,9 +636,11 @@ function facingDir(angle: number): 'up' | 'down' | 'left' | 'right' {
   return angle > 0 ? 'down' : 'up';
 }
 
-function spriteFrame(wf: number, menuOpen: boolean): 'idle' | 'walk1' | 'walk2' {
+function spriteFrame(wf: number, menuOpen: boolean, dir: 'up' | 'down' | 'left' | 'right'): 'idle' | 'walk1' | 'walk2' {
   if (menuOpen || wf === 0) return 'idle';
-  return Math.floor((wf / (Math.PI / 2)) % 2) === 0 ? 'walk1' : 'walk2';
+  const beat = Math.floor((wf / (Math.PI / 2)) % 2) === 0;
+  if (dir === 'left' || dir === 'right') return beat ? 'idle' : 'walk1';
+  return beat ? 'walk1' : 'walk2';
 }
 
 function drawPlayer(gs: GameState): void {
@@ -546,7 +657,7 @@ function drawPlayerSprite(p: import('./types').Player, apronColor: string, menuO
   ctx.beginPath(); ctx.ellipse(0, 16, p.radius, 6, 0, 0, Math.PI * 2); ctx.fill();
 
   const dir = facingDir(p.facing);
-  const frame = spriteFrame(p.walkFrame, menuOpen);
+  const frame = spriteFrame(p.walkFrame, menuOpen, dir);
   const mirrorRight = dir === 'right';
   const spriteKey = `p1m_${mirrorRight ? 'left' : dir}_${frame}`;
   const img = _sprites[spriteKey];
@@ -683,8 +794,8 @@ function drawOrderStrip(gs: GameState): void {
 
 function drawHUD(gs: GameState): void {
   const sec = Math.ceil(Math.max(0, gs.levelTimer) / 1000);
-  const mm = String(Math.floor(sec / 60)).padStart(2, '0');
-  const ss = String(sec % 60).padStart(2, '0');
+  const mm = sec > 5999 ? '99' : String(Math.floor(sec / 60)).padStart(2, '0');
+  const ss = sec > 5999 ? '99' : String(sec % 60).padStart(2, '0');
 
   // Anchor HUD to right wall area (fixed, not window-relative)
   const hudX = Math.min(W - 15, 1168);
@@ -801,9 +912,6 @@ function drawOverlay(gs: GameState, win: boolean): void {
   ctx.fillStyle = gs.score < 0 ? '#f88' : '#ffd';
   ctx.font = 'bold 22px monospace';
   ctx.fillText(overlayMoney, W / 2, H / 2 + 14);
-  ctx.fillStyle = '#aaa';
-  ctx.font = '16px monospace';
-  ctx.fillText('Press R to restart', W / 2, H / 2 + 46);
 }
 
 function drawDailyReport(gs: GameState): void {
@@ -1167,6 +1275,7 @@ export function drawNameEntry(chars: string[], cursor: number, score: number, le
 export function drawLeaderboard(
   entries: import('./leaderboard').LeaderboardEntry[],
   highlightScore: number,
+  mode: 'rookie' | 'pro' = 'rookie',
 ): void {
   ctx.fillStyle = 'rgba(0,0,0,0.92)';
   ctx.fillRect(0, 0, W, H);
@@ -1188,7 +1297,7 @@ export function drawLeaderboard(
   ctx.textAlign = 'center';
   ctx.fillStyle = blink ? '#f84' : '#b52';
   ctx.font = 'bold 22px monospace';
-  ctx.fillText('★  HIGH SCORES  ★', cx, y); y += 24;
+  ctx.fillText(mode === 'pro' ? '★  PRO HIGH SCORES  ★' : '★  ROOKIE HIGH SCORES  ★', cx, y); y += 24;
 
   ctx.strokeStyle = '#432'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(px + 20, y); ctx.lineTo(px + panelW - 20, y); ctx.stroke(); y += 14;
@@ -1252,4 +1361,75 @@ export function drawLeaderboard(
   ctx.fillStyle = blink ? '#4af' : '#268';
   ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
   ctx.fillText('E or SPACE to continue', cx, py + panelH - 20);
+}
+
+// ─── Tutorial overlay ─────────────────────────────────────────────────────────
+
+export interface TutorialStepDef { title: string; sub: string }
+
+// Bottom-left reminder shown while step is active (after modal dismissed).
+export function drawTutorialHint(step: number, steps: readonly TutorialStepDef[]): void {
+  if (step >= steps.length) return;
+  const { title, sub } = steps[step];
+  const BOX_W = 400;
+  const BOX_H = 50;
+  const x = 8;
+  const y = H - BOX_H - 8;
+
+  ctx.fillStyle = 'rgba(8,4,0,0.90)';
+  ctx.fillRect(x, y, BOX_W, BOX_H);
+  ctx.strokeStyle = '#b05018';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, BOX_W, BOX_H);
+
+  ctx.fillStyle = '#f84';
+  ctx.font = 'bold 12px monospace'; ctx.textAlign = 'left';
+  ctx.fillText(title, x + 8, y + 18);
+
+  ctx.fillStyle = '#bbb';
+  ctx.font = '11px monospace';
+  ctx.fillText(sub, x + 8, y + 36);
+}
+
+// Centered modal — pauses the game while shown.
+export function drawTutorialModal(step: number, steps: readonly TutorialStepDef[]): void {
+  if (step >= steps.length) return;
+  const { title, sub } = steps[step];
+  const total = steps.length;
+
+  // Dim overlay
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Centered box
+  const BOX_W = 540;
+  const BOX_H = 120;
+  const bx = (W - BOX_W) / 2;
+  const by = (H - BOX_H) / 2;
+
+  ctx.fillStyle = 'rgba(14,7,0,0.97)';
+  ctx.fillRect(bx, by, BOX_W, BOX_H);
+  ctx.strokeStyle = '#f84';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(bx, by, BOX_W, BOX_H);
+
+  // Step counter
+  ctx.fillStyle = '#664';
+  ctx.font = '10px monospace'; ctx.textAlign = 'right';
+  ctx.fillText(`${step + 1} / ${total}`, bx + BOX_W - 10, by + 16);
+
+  // Title
+  ctx.fillStyle = '#f84';
+  ctx.font = 'bold 20px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(title, W / 2, by + 46);
+
+  // Sub-text
+  ctx.fillStyle = '#eee';
+  ctx.font = '13px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(sub, W / 2, by + 74);
+
+  // Prompt
+  ctx.fillStyle = '#888';
+  ctx.font = '11px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('Tap or press SPACE to continue', W / 2, by + BOX_H - 10);
 }

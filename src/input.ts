@@ -2,7 +2,7 @@ export const keys: Set<string> = new Set();
 export const input = {
   interactPressed: false,
   interactHeld: false,
-  restartPressed: false,
+
   menuPickUp:    false,
   menuPickLeft:  false,
   menuPickRight: false,
@@ -25,7 +25,7 @@ export function initInput(): void {
       _interactDown = true;
       input.interactPressed = true;
     }
-    if (e.code === 'KeyR') input.restartPressed = true;
+
     if (e.code === 'KeyW' || e.code === 'ArrowUp')    input.menuPickUp    = true;
     if (e.code === 'KeyA' || e.code === 'ArrowLeft')  input.menuPickLeft  = true;
     if (e.code === 'KeyD' || e.code === 'ArrowRight') input.menuPickRight = true;
@@ -61,7 +61,7 @@ export function virtualKeyUp(code: string): void {
 
 export function flushFrame(): void {
   input.interactPressed = false;
-  input.restartPressed  = false;
+
   input.menuPickUp      = false;
   input.menuPickLeft    = false;
   input.menuPickRight   = false;

@@ -5,7 +5,7 @@ export type FoodId =
   | 'fries'     | 'fries_lg' | 'rings' | 'rings_lg' | 'whole_pork' | 'pork'
   | 'cheese'    | 'raw_cheese_patty' | 'cheese_patty';
 
-export type StationKind = 'supply' | 'cooler' | 'freezer' | 'grill' | 'fryer' | 'smoker' | 'chop' | 'prep' | 'counter' | 'trash';
+export type StationKind = 'supply' | 'cooler' | 'freezer' | 'grill' | 'fryer' | 'smoker' | 'chop' | 'prep' | 'counter' | 'trash' | 'warmer';
 
 export interface CookSlot {
   food: FoodId | null;
@@ -96,6 +96,7 @@ export interface GameState {
   maxFails: number;
   thresholdsUnlocked: number;
   levelSales: number;
+  tutorialOrderQueue: string[];
   levelCOGS: number;
   levelLabor: number;
   levelWaste: number;

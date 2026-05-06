@@ -134,8 +134,9 @@ export const MEAL_PRICES: Record<string, number> = {
   ),
 };
 
+
 export const PARTIAL_SPOIL_TIME    = 50000;
-export const STAGED_SPOIL_TIME     = 75000;
+export const STAGED_SPOIL_TIME     = 60000;
 export const LABOR_RATE            = 10;   // cents/sec during prep + play ($0.10/s)
 export const OVERTIME_LABOR_RATE   = 15;   // cents/sec during overtime ($0.15/s)
 export const OVERHEAD_COST         = 2000; // $20 overhead deducted at end of each level

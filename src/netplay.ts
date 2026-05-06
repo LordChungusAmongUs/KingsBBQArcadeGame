@@ -228,5 +228,6 @@ function snapshotToGameState(snap: GameSnapshot): GameState {
     activeMenu: snap.activeMenu ?? null, maxFails: snap.maxFails, thresholdsUnlocked: snap.thresholdsUnlocked,
     levelSales: snap.levelSales, levelCOGS: snap.levelCOGS, levelLabor: snap.levelLabor,
     levelWaste: snap.levelWaste, salesByItem: snap.salesByItem ?? {},
+    tutorialOrderQueue: [],
   };
 }

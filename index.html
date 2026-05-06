@@ -46,6 +46,8 @@
       font-family: inherit; font-size: 1rem; letter-spacing: 0.25em;
       cursor: pointer; transition: background 0.2s, color 0.2s; touch-action: manipulation;
     }
+    #tutorialBtn { border: 2px solid #8cf; color: #8cf; }
+    #tutorialBtn:hover, #tutorialBtn:focus { background: #8cf3; color: #fff; outline: none; }
     #startBtn  { border: 2px solid #f84; color: #f84; }
     #startBtn:hover, #startBtn:focus  { background: #f842; color: #fff; outline: none; }
     #coopBtn   { border: 2px solid #4af; color: #4af; }
@@ -476,13 +478,14 @@
       </div>
 
       <div class="menuBtns">
-        <button id="startBtn">PRACTICE</button>
-        <button id="lobbyBtn">PLAY</button>
+        <button id="tutorialBtn">TUTORIAL</button>
+        <button id="startBtn">ROOKIE</button>
+        <button id="lobbyBtn">PRO</button>
       </div>
     </div>
 
     <!-- ── Lobby screen ─────────────────────────────────────────────── -->
-    <div id="lobbyScreen">
+    <div id="lobbyScreen" style="display:none">
       <div id="lobbyHeader">
         <span id="lobbyTitle">👑 KINGS BBQ — LOBBY</span>
         <button id="lobbyBack">← BACK</button>

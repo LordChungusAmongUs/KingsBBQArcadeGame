@@ -9,10 +9,10 @@ const GAME_TRACKS = [
 ];
 import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp, keys } from './input';
 import { createGame, tickGame, resolveCollisions } from './game';
-import { initRenderer, render, resizeRenderer, loadSprites, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu } from './renderer';
+import { initRenderer, render, resizeRenderer, loadSprites, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu, drawTutorialHint, drawTutorialModal } from './renderer';
 import type { GameState, CookSlot } from './types';
-import { LEVELS, STARTING_MONEY, PLAYER_SPEED } from './config';
-import { loadLeaderboard, saveEntry, type LeaderboardEntry } from './leaderboard';
+import { LEVELS, STARTING_MONEY, PLAYER_SPEED, STAGED_SPOIL_TIME } from './config';
+import { loadLeaderboard, saveEntry, type LeaderboardEntry, type LeaderboardMode } from './leaderboard';
 import { initAuth, signInWithGoogle, signOutUser, checkRedirectResult } from './auth';
 import type { User } from 'firebase/auth';
 import {
@@ -85,11 +85,9 @@ initAuth(u => {
       updateAuthUI();
       // Use localStorage (not sessionStorage) — iOS Safari clears sessionStorage
       // during cross-origin redirect navigation, losing the pending-lobby flag.
-      const pendingLobby = localStorage.getItem('kbbq_pendingLobby');
-      if (pendingLobby) {
-        localStorage.removeItem('kbbq_pendingLobby');
-        openLobbyScreen();
-      } else if (lobbyScreen.style.display !== 'none' && !unsubPresence) {
+      // Always clear the pending-lobby flag — player must choose mode from the main menu
+      localStorage.removeItem('kbbq_pendingLobby');
+      if (lobbyScreen.style.display !== 'none' && !unsubPresence) {
         // Auth resolved after the user already opened the lobby (race on slow
         // iOS connections) — re-init now that we have a valid user.
         openLobbyScreen();
@@ -169,11 +167,20 @@ let currentLevel = 1;
 let lastTime = 0;
 let isCoop = false;
 
+// ─── Tutorial state ───────────────────────────────────────────────────────────
+let isTutorial = false;
+let tutorialStep = 0;
+let tutorialHintTimer = 0;
+let tutorialBaseCompleted = 0;
+let tutorialPlayerMoved = false;
+let tutorialModalActive = false;
+
 type Screen = 'game' | 'name_entry' | 'leaderboard';
 let screen: Screen = 'game';
 let isPaused = false, pauseMenuIdx = 0;
 let pauseSubScreen: 'controls' | 'restaurant_menu' | null = null;
 let leaderboardReturn: 'menu' | 'pause' = 'menu';
+let leaderboardMode: LeaderboardMode = 'rookie';
 
 const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ ';
 let nameChars = ['A','A','A'], nameCursor = 0;
@@ -181,6 +188,9 @@ let leaderboardEntries: LeaderboardEntry[] = [];
 let lastGameWasCoop = false;
 let lastGameWasOnline = false;
 let lastGameScore = 0, lastGameLevel = 1;
+let isProMode = false;
+let lastGameWasPro = false;
+let pgFocusIdx = 0;
 
 // ─── Online co-op state ───────────────────────────────────────────────────────
 
@@ -222,7 +232,7 @@ let onlineUsers: PresenceUser[] = [];
 
 // ─── Menu helpers ─────────────────────────────────────────────────────────────
 
-const menuBtns = ['startBtn','lobbyBtn'].map(id => document.getElementById(id) as HTMLButtonElement);
+const menuBtns = ['tutorialBtn','startBtn','lobbyBtn'].map(id => document.getElementById(id) as HTMLButtonElement);
 let menuFocusIdx = 0;
 
 function focusMenuBtn(idx: number): void {
@@ -294,7 +304,7 @@ async function updateMenuLeaderboard(): Promise<void> {
       return;
     }
   } catch { /* fall through */ }
-  const entries = loadLeaderboard();
+  const entries = loadLeaderboard('rookie');
   list.innerHTML = entries.length === 0
     ? '<div class="hs-empty">no scores yet — get cooking!</div>'
     : entries.map((e,i) =>
@@ -312,6 +322,7 @@ async function updateMenuLeaderboard(): Promise<void> {
 function goToNameEntry(g: GameState): void {
   lastGameWasCoop = isCoop;
   lastGameWasOnline = isOnlineGame;
+  lastGameWasPro = isProMode;
   if (isOnlineGame && isOnlineHost) cleanupOnlineGame();
   recordLevelStats(g);
   flushSession().catch(console.error);
@@ -337,7 +348,8 @@ function handleNameEntry(): void {
 function submitName(): void {
   const name = nameChars.join('').trim() || 'AAA';
   hideMobileNameEntry();
-  leaderboardEntries = saveEntry(name, lastGameScore, lastGameLevel);
+  leaderboardMode = lastGameWasPro ? 'pro' : 'rookie';
+  leaderboardEntries = saveEntry(name, lastGameScore, lastGameLevel, leaderboardMode);
   if (user) saveCloudScore(user.uid, user.displayName??'', user.photoURL??'', name, lastGameScore, lastGameLevel).catch(()=>{});
   enterLeaderboard();
 }
@@ -372,8 +384,11 @@ function showPostgameOverlay(): void {
   } else {
     btn.textContent = 'PLAY SOLO AGAIN';
   }
+  document.getElementById('pgLobby')!.style.display = lastGameWasPro ? '' : 'none';
+  pgFocusIdx = 0;
   document.getElementById('postgameOverlay')!.style.display = 'flex';
   screen = 'game'; // stop leaderboard loop so loop() doesn't interfere
+  requestAnimationFrame(() => (document.getElementById('pgPlayAgain') as HTMLButtonElement).focus());
 }
 
 function hidePostgameOverlay(): void {
@@ -455,7 +470,7 @@ function cleanupOnlineGame(): void {
 
 function startOnlineGame(lobbyId: string, asHost: boolean): void {
   closeLobbyScreen();
-  isOnlineGame = true; isOnlineHost = asHost; activeLobbyId = lobbyId;
+  isOnlineGame = true; isOnlineHost = asHost; activeLobbyId = lobbyId; isProMode = true;
   if (asHost) {
     isCoop = true; hostP2Seq = 0;
     startHostSync(lobbyId, () => gs, handleP2FromNet);
@@ -496,7 +511,6 @@ function guestLoop(now: number): void {
   if (!isOnlineGame || isOnlineHost) return;
   const dt = Math.min(now - lastTime, 100);
   lastTime = now;
-  if (input.restartPressed) { cleanupOnlineGame(); flushFrame(); showMenu(); return; }
   let justInteracted = false;
   if (input.interactPressed) { guestInteractSeq++; justInteracted = true; }
   const inp: P2InputData = {
@@ -585,21 +599,197 @@ function guestLoop(now: number): void {
   requestAnimationFrame(guestLoop);
 }
 
+// ─── Tutorial ────────────────────────────────────────────────────────────────
+
+interface TutorialStep {
+  title: string;
+  sub: string;
+  done?: (gs: GameState) => boolean;
+  timedMs?: number;
+  onEnter?: (gs: GameState) => void;
+  minLevel?: number;  // step only runs/shows at this level or higher
+}
+
+const TUTORIAL_STEPS: TutorialStep[] = [
+  // ── Level 1 ──────────────────────────────────────────────────────────────────
+  { title: 'WELCOME!',
+    sub: 'Use the arrow buttons to move around the kitchen.',
+    done: () => tutorialPlayerMoved,
+    timedMs: 4000 },
+  { title: 'PREP TIME',
+    sub: 'In a real run you get 15 seconds to prep before orders start coming in. Use it wisely!',
+    timedMs: 5000 },
+  { title: 'OPEN THE COOLER',
+    sub: 'Walk to the blue COOLER (back wall). Tap or press SPACE to open and close.',
+    done: gs => gs.activeMenu?.stationId === 'cooler' },
+  { title: 'GET RAW PORK',
+    sub: 'Press the corresponding arrow button on screen to select Raw Pork.',
+    done: gs => gs.player.held?.food === 'raw_pork' },
+  { title: 'START THE SMOKER',
+    sub: 'Walk to the SMOKER (far left wall). Tap or press SPACE to place the pork.',
+    done: gs => gs.stations.some(s => s.kind === 'smoker' && s.slots.some(sl => sl.food !== null)) },
+  { title: 'PORK IS SMOKING!',
+    sub: 'It will be ready at the start of Level 2. Now let\'s take some orders!',
+    timedMs: 3000 },
+  { title: 'ORDER 1: HAMBURGER',
+    sub: 'Get a RAW PATTY from COOLER. Walk to GRILL (top wall). Tap or SPACE to place.',
+    onEnter: gs => { gs.tutorialOrderQueue.push('Hamburger'); gs.nextOrderIn = 0; },
+    done: gs => gs.stations.some(s => s.kind === 'grill' && s.slots.some(sl => sl.food !== null)) },
+  { title: 'WAIT & PICK UP',
+    sub: 'Green bar fills, then blinks when done. Tap or SPACE to pick up the patty.',
+    done: gs => !!(gs.player.held?.food === 'patty' && !gs.player.held!.burned) },
+  { title: 'PREP & DELIVER',
+    sub: 'Tap/SPACE at PREP TABLE to stage. Grab the plate, walk to COUNTER to serve.',
+    done: gs => gs.completed >= 1 },
+  { title: 'ORDER 2: SM FRIES',
+    sub: 'Walk to the FREEZER (back wall, far right). Tap or SPACE to open it.',
+    onEnter: gs => { gs.tutorialOrderQueue.push('Sm Fry'); gs.nextOrderIn = 0; },
+    done: gs => gs.activeMenu?.stationId === 'freezer' },
+  { title: 'GRAB RAW FRIES',
+    sub: 'Press the corresponding arrow button on screen to select. Walk to FRYER.',
+    done: gs => gs.stations.some(s => s.kind === 'fryer' && s.slots.some(sl => sl.food !== null)) },
+  { title: 'FRIES COOK FAST',
+    sub: 'Pick up when blinking. Stage on PREP TABLE and deliver!',
+    done: gs => gs.completed >= 2 },
+  // Inject a near-spoil fry; modal shows immediately, auto-advances when it spoils (~4s)
+  { title: 'HEADS UP: FOOD SPOILS!',
+    sub: 'That leftover fry is going bad — watch the timer bar on the prep table!',
+    onEnter: gs => {
+      gs.staged = gs.staged.filter(s => s.food !== 'fries');
+      gs.staged.push({ food: 'fries', spoilTimer: STAGED_SPOIL_TIME - 4000, spoiled: false, count: 1 });
+    },
+    done: gs => gs.staged.some(s => s.food === 'fries' && s.spoiled) },
+  // Modal auto-pops when fries spoil; player must pick them up and trash them
+  { title: 'FOOD SPOILED!',
+    sub: 'Empty hands → PREP TABLE to pick it up → TRASH (bottom right) to discard.',
+    done: gs => !gs.staged.some(s => s.food === 'fries') && !(gs.player.held?.food === 'fries' && gs.player.held?.burned) },
+  { title: 'ORDER 3: CHEESEBURGER',
+    sub: 'Cook a PATTY on grill. Then get CHEESE from COOLER.',
+    onEnter: gs => { gs.tutorialOrderQueue.push('Cheeseburger'); gs.nextOrderIn = 0; },
+    done: gs => gs.player.held?.food === 'cheese' },
+  { title: 'MELT THE CHEESE',
+    sub: 'Walk to a READY patty on grill. Tap or SPACE to melt cheese on it.',
+    done: gs => gs.player.held?.food === 'cheese_patty' },
+  { title: 'SERVE CHEESEBURGER',
+    sub: 'Stage on PREP TABLE and deliver at COUNTER!',
+    done: gs => gs.completed >= 3 },
+  { title: 'ORDER 4: COMBO MEAL',
+    sub: 'Cheeseburger + Sm Pups! Cook the cheese patty AND pups. Stage both.',
+    onEnter: gs => { gs.tutorialOrderQueue.push('Cheeseburger+Sm Pup'); gs.nextOrderIn = 0; },
+    done: gs => gs.completed >= 4 },
+  { title: 'TIP: BURNED FOOD',
+    sub: 'Red slot = burned! Grab it, walk to TRASH (bottom-right corner), drop it.',
+    timedMs: 5000 },
+  { title: 'CLOSING TIME!',
+    sub: 'At closing time all extra food is discarded — except pork in the smoker. Clean it up!',
+    onEnter: gs => { gs.levelTimer = 0; },
+    done: gs => !gs.stations.some(st => st.slots.some(sl => sl.state === 'burned')) &&
+                !gs.staged.some(si => si.spoiled) },
+  // ── Level 2 (minLevel: 2 — blocked from running or showing during Level 1) ────
+  { title: 'PORK IS READY!',
+    sub: 'The pork should be finishing up soon. Walk to the SMOKER (far left) and pick it up when ready!',
+    done: gs => gs.player.held?.food === 'whole_pork',
+    minLevel: 2 },
+  { title: 'CHOP TABLE',
+    sub: 'Place on CHOP TABLE (bottom left). Tap or SPACE again to chop it up.',
+    done: gs => gs.player.held?.food === 'pork',
+    minLevel: 2 },
+  { title: 'GET HOT DOGS READY',
+    sub: 'Pick up 2 RAW HOT DOGS from COOLER. Grill them and move to the WARMER BOX. Extra pork just finished in the SMOKER too — pick it up and chop it for the BBQ Plate order!',
+    onEnter: gs => {
+      const smoker = gs.stations.find(s => s.kind === 'smoker');
+      const empty = smoker?.slots.find(sl => sl.food === null);
+      if (empty) { empty.food = 'whole_pork'; empty.state = 'done'; empty.cookTimer = 0; }
+    },
+    done: gs => gs.stations.some(s => s.kind === 'warmer' && s.slots.filter(sl => sl.food === 'hotdog').length >= 2),
+    minLevel: 2 },
+  { title: '4 ORDERS ARE IN!',
+    sub: 'BBQ Sand., BBQ Plate, Hotdog+Fry, Hotdog+Pups! Start with the BBQ orders using your pulled pork.',
+    onEnter: gs => { gs.tutorialOrderQueue.push('BBQ Sand.', 'BBQ Plate', 'Hotdog+Sm Fry', 'Hotdog+Sm Pup'); gs.nextOrderIn = 0; },
+    done: gs => gs.completed > tutorialBaseCompleted + 1,
+    minLevel: 2 },
+  { title: 'FINISH THE RUSH!',
+    sub: 'Grab hotdogs from the WARMER and fry the sides to complete the combos. Deliver all 4!',
+    done: gs => gs.orders.length === 0 && gs.tutorialOrderQueue.length === 0,
+    minLevel: 2 },
+];
+
+function tickTutorial(gs: GameState, dt: number): void {
+  if (!tutorialPlayerMoved && (keys.has('KeyW') || keys.has('KeyA') || keys.has('KeyS') || keys.has('KeyD') ||
+      keys.has('ArrowUp') || keys.has('ArrowDown') || keys.has('ArrowLeft') || keys.has('ArrowRight'))) {
+    tutorialPlayerMoved = true;
+  }
+  if (tutorialModalActive) {
+    if (input.interactPressed || input.p2InteractPressed) { tutorialModalActive = false; tutorialHintTimer = 0; }
+    return;
+  }
+  if (tutorialStep >= TUTORIAL_STEPS.length) {
+    // All steps done — end the level once nothing is in-flight
+    if (gs.tutorialOrderQueue.length === 0 && gs.orders.length === 0 &&
+        gs.plates.length === 0 && gs.staged.length === 0 && gs.phase === 'playing') {
+      gs.levelTimer = 0;
+    }
+    return;
+  }
+  const step = TUTORIAL_STEPS[tutorialStep];
+  // Level gate: Level 2 steps don't run or show while still in Level 1 — end Level 1 first
+  if (step.minLevel && gs.level < step.minLevel) {
+    if (gs.tutorialOrderQueue.length === 0 && gs.orders.length === 0 &&
+        gs.plates.length === 0 && gs.staged.length === 0 && gs.phase === 'playing') {
+      gs.levelTimer = 0;
+    }
+    return;
+  }
+  const advance = (): void => {
+    tutorialStep++; tutorialHintTimer = 0;
+    if (tutorialStep < TUTORIAL_STEPS.length) {
+      const next = TUTORIAL_STEPS[tutorialStep];
+      next.onEnter?.(gs);
+      // Only show modal for action-required steps (not timed/informational ones)
+      if (next.timedMs === undefined && (!next.minLevel || gs.level >= next.minLevel)) tutorialModalActive = true;
+    }
+  };
+  if (step.timedMs !== undefined) {
+    tutorialHintTimer += dt;
+    if (tutorialHintTimer >= step.timedMs || step.done?.(gs)) advance();
+  } else if (step.done?.(gs)) {
+    advance();
+  }
+  // Suppress random order spawning — only scripted orders (via onEnter) may appear
+  if (gs.tutorialOrderQueue.length === 0) gs.nextOrderIn = 9999999;
+}
+
 // ─── Main game loop ───────────────────────────────────────────────────────────
 
 function loop(now: number): void {
   const dt = Math.min(now - lastTime, 100); lastTime = now;
-  if (input.restartPressed) {
-    if (isOnlineGame) cleanupOnlineGame();
-    flushFrame(); screen = 'game'; showMenu(); return;
-  }
+  // In solo mode, Space bar acts as the primary interact key (clears p2 flag to avoid double-trigger)
+  if (!isCoop && input.p2InteractPressed) { input.interactPressed = true; input.p2InteractPressed = false; }
   if (screen === 'name_entry') {
     handleNameEntry(); if (gs) render(gs); drawNameEntry(nameChars, nameCursor, lastGameScore, lastGameLevel);
     flushFrame(); requestAnimationFrame(loop); return;
   }
   if (screen === 'leaderboard') {
     if (input.interactPressed || input.p2InteractPressed) { dismissLeaderboard(); return; }
-    if (gs) render(gs); drawLeaderboard(leaderboardEntries, lastGameScore);
+    if (gs) render(gs); drawLeaderboard(leaderboardEntries, lastGameScore, leaderboardMode);
+    flushFrame(); requestAnimationFrame(loop); return;
+  }
+  // Post-game overlay — arrow key navigation
+  if (document.getElementById('postgameOverlay')!.style.display !== 'none') {
+    const pgBtns = (['pgPlayAgain', 'pgLobby', 'pgMainMenu'] as const)
+      .map(id => document.getElementById(id) as HTMLButtonElement)
+      .filter(btn => btn.style.display !== 'none');
+    if ((input.menuPickUp || input.p2MenuPickUp) && pgBtns.length > 0) {
+      pgFocusIdx = (pgFocusIdx - 1 + pgBtns.length) % pgBtns.length;
+      pgBtns[pgFocusIdx].focus();
+    }
+    if ((input.menuPickDown || input.p2MenuPickDown) && pgBtns.length > 0) {
+      pgFocusIdx = (pgFocusIdx + 1) % pgBtns.length;
+      pgBtns[pgFocusIdx].focus();
+    }
+    if ((input.interactPressed || input.p2InteractPressed) && pgBtns.length > 0) {
+      pgBtns[pgFocusIdx].click();
+    }
     flushFrame(); requestAnimationFrame(loop); return;
   }
   if (!gs) return;
@@ -616,7 +806,7 @@ function loop(now: number): void {
           case 1: isPaused = false; flushFrame(); if (isOnlineGame) cleanupOnlineGame(); showMenu(); return;
           case 2: pauseSubScreen = 'restaurant_menu'; break;
           case 3: pauseSubScreen = 'controls'; break;
-          case 4: leaderboardEntries = loadLeaderboard(); leaderboardReturn = 'pause'; screen = 'leaderboard'; break;
+          case 4: leaderboardMode = isProMode ? 'pro' : 'rookie'; leaderboardEntries = loadLeaderboard(leaderboardMode); leaderboardReturn = 'pause'; screen = 'leaderboard'; break;
         }
       }
     }
@@ -626,21 +816,40 @@ function loop(now: number): void {
     else drawPauseMenu(pauseMenuIdx);
     flushFrame(); requestAnimationFrame(loop); return;
   }
-  tickGame(gs, dt);
+  if (!(isTutorial && tutorialModalActive)) tickGame(gs, dt);
+  if (isTutorial) tickTutorial(gs, dt);
   if (gs.phase === 'level_end' && (gs.levelEndTimer <= 0 || input.p2InteractPressed || input.interactPressed)) {
+    recordLevelStats(gs);
+    if (isTutorial && gs.level === 2) {
+      isTutorial = false; tutorialStep = 0; tutorialModalActive = false;
+      goToNameEntry(gs); requestAnimationFrame(loop); return;
+    }
     if (gs.level < LEVELS.length) {
-      recordLevelStats(gs);
       const smoker = gs.stations.find(s => s.kind === 'smoker');
       startLevel(gs.level+1, gs.score, smoker?.slots.map(sl=>({...sl})), Math.max(0,gs.failed-1), gs.thresholdsUnlocked);
+      if (isTutorial && gs) {
+        gs.tutorialOrderQueue = [];
+        gs.levelTimer = 9999999;
+        tutorialBaseCompleted = gs.completed;
+        TUTORIAL_STEPS[tutorialStep]?.onEnter?.(gs);
+        tutorialModalActive = true;
+      }
       return;
     }
     goToNameEntry(gs); requestAnimationFrame(loop); return;
   }
   if (gs.phase === 'game_over') {
     if (gs.levelEndTimer <= 0) { goToNameEntry(gs); requestAnimationFrame(loop); return; }
-    render(gs); flushFrame(); requestAnimationFrame(loop); return;
+    render(gs);
+    if (isTutorial) drawTutorialHint(tutorialStep, TUTORIAL_STEPS);
+    flushFrame(); requestAnimationFrame(loop); return;
   }
-  render(gs); flushFrame(); requestAnimationFrame(loop);
+  render(gs);
+  if (isTutorial) {
+    if (tutorialModalActive) drawTutorialModal(tutorialStep, TUTORIAL_STEPS);
+    else drawTutorialHint(tutorialStep, TUTORIAL_STEPS);
+  }
+  flushFrame(); requestAnimationFrame(loop);
 }
 
 // ─── Lobby screen ─────────────────────────────────────────────────────────────
@@ -958,7 +1167,7 @@ document.getElementById('globalChatInput')!.addEventListener('keydown', e => {
   if (e.key === 'Enter') handleGlobalSend();
 });
 document.getElementById('lobbyPlaySolo')!.addEventListener('click', () => {
-  closeLobbyScreen(); isCoop = false; startLevel(1, STARTING_MONEY);
+  closeLobbyScreen(); isCoop = false; isProMode = true; startLevel(1, STARTING_MONEY);
 });
 document.getElementById('lobbyPlayCoop')!.addEventListener('click', startMatchmakingFn);
 document.getElementById('cancelMatchmakingBtn')!.addEventListener('click', cancelMatchmakingFn);
@@ -984,7 +1193,15 @@ document.getElementById('pgPlayAgain')!.addEventListener('click', () => {
 
 // ─── Menu buttons ─────────────────────────────────────────────────────────────
 
-document.getElementById('startBtn')!.addEventListener('click', () => { isCoop = false; startLevel(1, STARTING_MONEY); });
+document.getElementById('tutorialBtn')!.addEventListener('click', () => {
+  isCoop = false; isTutorial = true; tutorialStep = 0; tutorialHintTimer = 0;
+  tutorialPlayerMoved = false; tutorialBaseCompleted = 0; tutorialModalActive = false;
+  startLevel(1, STARTING_MONEY);
+  if (gs) { gs.tutorialOrderQueue = []; gs.levelTimer = 9999999; TUTORIAL_STEPS[0]?.onEnter?.(gs); }
+  // Flush interact flags so the click/keypress that opened this screen doesn't dismiss the first modal
+  input.interactPressed = false; input.p2InteractPressed = false;
+});
+document.getElementById('startBtn')!.addEventListener('click', () => { isCoop = false; isTutorial = false; isProMode = false; startLevel(1, STARTING_MONEY); });
 document.getElementById('lobbyBtn')!.addEventListener('click', openLobbyScreen);
 
 function toggleFullscreen(): void {

@@ -57,6 +57,7 @@ export function createGame(level: number, carryScore = 0, coop = false, smokerSl
     levelLabor: 0,
     levelWaste: 0,
     salesByItem: {},
+    tutorialOrderQueue: [],
   };
   if (smokerSlots) {
     const smoker = game.stations.find(s => s.kind === 'smoker');
@@ -229,7 +230,13 @@ function tickMenu(gs: GameState): void {
     return;
   }
 
-  const menu = st.menu ?? [];
+  const isWarmer = st.kind === 'warmer';
+  const menu: FoodId[] = isWarmer
+    ? [...new Set(st.slots.filter(sl => sl.food && sl.state === 'ready').map(sl => sl.food!))]
+    : (st.menu ?? []);
+
+  if (isWarmer && menu.length === 0) { gs.activeMenu = null; return; }
+
   const dirs: Array<['up'|'left'|'right'|'down', boolean]> = owner === 2 ? [
     ['up',    input.p2MenuPickUp],
     ['left',  input.p2MenuPickLeft],
@@ -247,13 +254,33 @@ function tickMenu(gs: GameState): void {
     const idx = menuKeySlot(menu.length, dir);
     if (idx < 0 || idx >= menu.length) continue;
     const food = menu[idx];
-    const cost = FOOD.get(food)?.cost ?? 0;
-    if (p.held === null) {
-      p.held = { food, count: 1, burned: false };
-    } else if (p.held.food === food && !p.held.burned && p.held.count < MAX_STACK) {
-      p.held.count++;
+    if (isWarmer) {
+      const slot = st.slots.find(sl => sl.food === food && sl.state === 'ready');
+      if (!slot) continue;
+      slot.food = null; slot.state = 'empty'; slot.timer = 0;
+      if (p.held === null) {
+        p.held = { food, count: 1, burned: false };
+      } else if (p.held.food === food && !p.held.burned && p.held.count < MAX_STACK) {
+        p.held.count++;
+      } else {
+        // Return current held item(s) to the warmer before swapping
+        if (!p.held.burned) {
+          for (let i = 0; i < p.held.count; i++) {
+            const es = st.slots.find(sl => sl.state === 'empty');
+            if (!es) break;
+            es.food = p.held!.food; es.state = 'ready'; es.timer = 0;
+          }
+        }
+        p.held = { food, count: 1, burned: false };
+      }
     } else {
-      p.held = { food, count: 1, burned: false };
+      if (p.held === null) {
+        p.held = { food, count: 1, burned: false };
+      } else if (p.held.food === food && !p.held.burned && p.held.count < MAX_STACK) {
+        p.held.count++;
+      } else {
+        p.held = { food, count: 1, burned: false };
+      }
     }
     break;
   }
@@ -349,15 +376,22 @@ function tickChop(gs: GameState, dt: number): void {
 
 function spawnOrder(gs: GameState): void {
   const lvl  = LEVELS[gs.level - 1];
-  const pool = ORDER_DEFS.filter(o => !o.hasPork || gs.level > 1);
 
-  let total = 0;
-  for (const o of pool) total += o.weight;
-  let r = Math.random() * total;
-  let chosen = pool[pool.length - 1];
-  for (let i = 0; i < pool.length; i++) {
-    r -= pool[i].weight;
-    if (r <= 0) { chosen = pool[i]; break; }
+  let chosen: import('./config').OrderDef | undefined;
+  if (gs.tutorialOrderQueue.length > 0) {
+    const name = gs.tutorialOrderQueue.shift()!;
+    chosen = ORDER_DEFS.find(o => o.name === name);
+  }
+  if (!chosen) {
+    const pool = ORDER_DEFS.filter(o => !o.hasPork || gs.level > 1);
+    let total = 0;
+    for (const o of pool) total += o.weight;
+    let r = Math.random() * total;
+    chosen = pool[pool.length - 1];
+    for (let i = 0; i < pool.length; i++) {
+      r -= pool[i].weight;
+      if (r <= 0) { chosen = pool[i]; break; }
+    }
   }
 
   gs.orders.push({
@@ -638,6 +672,28 @@ function doInteract(gs: GameState, playerNum: 1 | 2 = 1): void {
       gs.staged.push({ food: p.held.food, spoilTimer: 0, spoiled: false, count: stageCount });
       p.held.count--;
       if (p.held.count <= 0) p.held = null;
+    }
+    return;
+  }
+
+  // ── Warmer: place cooked food directly; open menu to retrieve ──
+  if (s.kind === 'warmer') {
+    const def = p.held ? FOOD.get(p.held.food) : null;
+    if (p.held && def && !def.isRaw && !p.held.burned && p.held.food !== 'whole_pork') {
+      const empty = s.slots.find(sl => sl.state === 'empty');
+      if (empty) {
+        empty.food = p.held.food;
+        empty.state = 'ready';
+        empty.timer = 0;
+        p.held.count--;
+        if (p.held.count <= 0) p.held = null;
+      }
+      return;
+    }
+    if (gs.activeMenu?.stationId === s.id && gs.activeMenu.owner === playerNum) {
+      gs.activeMenu = null;
+    } else {
+      gs.activeMenu = { stationId: s.id, owner: playerNum };
     }
     return;
   }
