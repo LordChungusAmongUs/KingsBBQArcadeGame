@@ -1,5 +1,5 @@
 import type { GameState, Order, FoodId, HeldItem, StagedItem, CookSlot } from './types';
-import { LEVELS, ORDERS, FOOD, MEAL_PRICES, INTERACT_RANGE, PLAYER_SPEED, PARTIAL_SPOIL_TIME, STAGED_SPOIL_TIME, LABOR_RATE, OVERTIME_LABOR_RATE, OVERHEAD_COST, BASE_MAX_FAILS, UPSET_THRESHOLDS, ORDER_DEFS } from './config';
+import { LEVELS, ORDERS, FOOD, MEAL_PRICES, INTERACT_RANGE, PLAYER_SPEED, PARTIAL_SPOIL_TIME, STAGED_SPOIL_TIME, LABOR_RATE, OVERTIME_LABOR_RATE, BASE_MAX_FAILS, UPSET_THRESHOLDS, ORDER_DEFS } from './config';
 import { buildStations, tickCooking, nearestStation, distToStation, placeOnStation, pickupFromStation } from './kitchen';
 import { input, keys } from './input';
 import { awardXP, incrementStat } from './profile';
@@ -29,6 +29,18 @@ function onCookingDone(food: FoodId, kind: string): void {
   else if (food === 'raw_fries')  incrementStat('fries_fried', 1);
   else if (food === 'raw_rings')  incrementStat('pups_fried', 1);
   else if (food === 'raw_pork' && kind === 'smoker') incrementStat('shoulders_smoked', 1);
+}
+
+function trackCook(gs: GameState, food: FoodId, kind: string): void {
+  if (kind === 'grill' || kind === 'fryer') gs.levelGrillFryerCooked++;
+  if (food === 'raw_pork' && kind === 'smoker') gs.levelPorkCooked++;
+}
+
+function calcOverhead(gs: GameState): number {
+  const porkCost = gs.levelPorkCooked > 0
+    ? 100 + (gs.levelPorkCooked - 1) * 50   // $1.00 first, $0.50 each additional
+    : 0;
+  return 1000 + porkCost + gs.levelGrillFryerCooked * 10; // $10 flat + pork + $0.10/grill/fryer
 }
 
 const MAX_STACK = 2;
@@ -70,6 +82,9 @@ export function createGame(level: number, carryScore = 0, playerCount = 1, smoke
     levelCOGS: 0,
     levelLabor: 0,
     levelWaste: 0,
+    levelOverhead: 0,
+    levelPorkCooked: 0,
+    levelGrillFryerCooked: 0,
     salesByItem: {},
     tutorialOrderQueue: [],
     levelSatisfactionSum: 0,
@@ -102,7 +117,7 @@ export function tickGame(gs: GameState, dt: number): void {
   if (gs.prepTimer > 0) {
     gs.prepTimer = Math.max(0, gs.prepTimer - dt);
     drainLabor(gs, dt, LABOR_RATE * gs.playerCount);
-    tickCooking(gs.stations, dt, onCookingDone);
+    tickCooking(gs.stations, dt, (food, kind) => { onCookingDone(food, kind); trackCook(gs, food, kind); });
     tickSmoker(gs);
     tickChop(gs, dt);
     tickStaged(gs, dt);
@@ -155,7 +170,9 @@ export function tickGame(gs: GameState, dt: number): void {
         gs.phase = 'game_over';
         gs.levelEndTimer = 4000;
       } else {
-        gs.score -= OVERHEAD_COST;
+        const overhead = calcOverhead(gs);
+        gs.levelOverhead = overhead;
+        gs.score -= overhead;
         gs.phase = 'level_end';
         gs.levelEndTimer = 20000;
       }
@@ -165,7 +182,7 @@ export function tickGame(gs: GameState, dt: number): void {
 
   tickOrders(gs, dt);
   tickStaged(gs, dt);
-  tickCooking(gs.stations, dt, onCookingDone);
+  tickCooking(gs.stations, dt, (food, kind) => { onCookingDone(food, kind); trackCook(gs, food, kind); });
   tickSmoker(gs);
   tickChop(gs, dt);
   if (gs.chopOutput > 0 && !gs.chopOutputSpoiled) {

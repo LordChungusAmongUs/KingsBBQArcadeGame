@@ -11,7 +11,7 @@ import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp, keys } from
 import { createGame, tickGame, resolveCollisions, remoteInput } from './game';
 import { initRenderer, render, resizeRenderer, loadSprites, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu, drawTutorialHint, drawTutorialModal, drawGameReport, updateHUDRunStats } from './renderer';
 import type { GameState, CookSlot } from './types';
-import { LEVELS, STARTING_MONEY, PLAYER_SPEED, STAGED_SPOIL_TIME, OVERHEAD_COST } from './config';
+import { LEVELS, STARTING_MONEY, PLAYER_SPEED, STAGED_SPOIL_TIME } from './config';
 import { loadLeaderboard, saveEntry, type LeaderboardEntry, type LeaderboardMode } from './leaderboard';
 import { initAuth, signInWithGoogle, signOutUser, checkRedirectResult } from './auth';
 import type { User } from 'firebase/auth';
@@ -896,7 +896,7 @@ function loop(now: number): void {
   if (gs.phase === 'level_end' && (gs.levelEndTimer <= 0 || input.p2InteractPressed || input.interactPressed)) {
     recordLevelStats(gs);
     runSales += gs.levelSales; runCOGS += gs.levelCOGS; runLabor += gs.levelLabor;
-    runWaste += gs.levelWaste; runOverhead += OVERHEAD_COST;
+    runWaste += gs.levelWaste; runOverhead += gs.levelOverhead;
     runCompleted += gs.completed; runFailed += gs.failed;
     runSatisfactionSum += gs.levelSatisfactionSum; runSatisfactionCount += gs.levelSatisfactionCount;
     if (isTutorial && gs.level === 2) {

@@ -106,6 +106,9 @@ export interface GameState {
   levelCOGS: number;
   levelLabor: number;
   levelWaste: number;
+  levelOverhead: number;        // overhead deducted at level end
+  levelPorkCooked: number;      // pork shoulders smoked this level
+  levelGrillFryerCooked: number; // items finished on grill or fryer this level
   salesByItem: Record<string, { count: number; revenue: number }>;
   levelSatisfactionSum: number;   // sum of per-order satisfaction scores (0-100) this level
   levelSatisfactionCount: number; // total orders counted (served + walked out)

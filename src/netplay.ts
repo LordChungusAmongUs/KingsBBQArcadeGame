@@ -114,6 +114,7 @@ export interface GameSnapshot {
   activeMenu: GameState['activeMenu'];
   maxFails: number; thresholdsUnlocked: number;
   levelSales: number; levelCOGS: number; levelLabor: number; levelWaste: number;
+  levelOverhead: number; levelPorkCooked: number; levelGrillFryerCooked: number;
   salesByItem: GameState['salesByItem'];
   levelSatisfactionSum: number; levelSatisfactionCount: number;
 }
@@ -226,7 +227,9 @@ function buildSnapshot(gs: GameState): GameSnapshot {
     chopStored: gs.chopStored, chopProgress: gs.chopProgress, chopOutput: gs.chopOutput,
     activeMenu: gs.activeMenu, maxFails: gs.maxFails, thresholdsUnlocked: gs.thresholdsUnlocked,
     levelSales: gs.levelSales, levelCOGS: gs.levelCOGS, levelLabor: gs.levelLabor,
-    levelWaste: gs.levelWaste, salesByItem: gs.salesByItem,
+    levelWaste: gs.levelWaste, levelOverhead: gs.levelOverhead,
+    levelPorkCooked: gs.levelPorkCooked, levelGrillFryerCooked: gs.levelGrillFryerCooked,
+    salesByItem: gs.salesByItem,
     levelSatisfactionSum: gs.levelSatisfactionSum, levelSatisfactionCount: gs.levelSatisfactionCount,
   };
 }
@@ -259,7 +262,9 @@ function snapshotToGameState(snap: GameSnapshot): GameState {
     chopOutputTimer: 0, chopOutputSpoiled: false,
     activeMenu: snap.activeMenu ?? null, maxFails: snap.maxFails, thresholdsUnlocked: snap.thresholdsUnlocked,
     levelSales: snap.levelSales, levelCOGS: snap.levelCOGS, levelLabor: snap.levelLabor,
-    levelWaste: snap.levelWaste, salesByItem: snap.salesByItem ?? {},
+    levelWaste: snap.levelWaste, levelOverhead: snap.levelOverhead ?? 0,
+    levelPorkCooked: snap.levelPorkCooked ?? 0, levelGrillFryerCooked: snap.levelGrillFryerCooked ?? 0,
+    salesByItem: snap.salesByItem ?? {},
     tutorialOrderQueue: [],
     levelSatisfactionSum: snap.levelSatisfactionSum ?? 0,
     levelSatisfactionCount: snap.levelSatisfactionCount ?? 0,
