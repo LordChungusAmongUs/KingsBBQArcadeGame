@@ -13,7 +13,7 @@ export const FOOD: Map<FoodId, FoodDef> = new Map([
   ['raw_hotdog', { id: 'raw_hotdog', name: 'Raw Hot Dog',      color: '#c0392b', isRaw: true,  cookTime: 7500,  burnTime: 5000,  station: 'grill',  rawOf: 'hotdog',     cost: 100 }],
   ['raw_fries',  { id: 'raw_fries',  name: 'Raw Fries', color: '#e8e8c0', isRaw: true,  cookTime: 7500,  burnTime: 3750, station: 'fryer', rawOf: 'fries', cost: 100 }],
   ['raw_rings',  { id: 'raw_rings',  name: 'Raw Pups',  color: '#d4c890', isRaw: true,  cookTime: 5000,  burnTime: 3750, station: 'fryer', rawOf: 'rings', cost: 100 }],
-  ['raw_pork',   { id: 'raw_pork',   name: 'Raw Pork',         color: '#e8b4b8', isRaw: true,  cookTime: 25000, burnTime: 12500, station: 'smoker', rawOf: 'whole_pork', cost: 700 }],
+  ['raw_pork',   { id: 'raw_pork',   name: 'Raw Pork',         color: '#e8b4b8', isRaw: true,  cookTime: 25000, burnTime: 12500, station: 'smoker', rawOf: 'whole_pork', cost: 500 }],
   ['patty',      { id: 'patty',      name: 'Patty',            color: '#5c3317', isRaw: false, cookTime: 10000, burnTime: 6250,  station: 'grill',  cookedFrom: 'raw_patty'  }],
   ['hotdog',     { id: 'hotdog',     name: 'Hot Dog',          color: '#a03020', isRaw: false, cookTime: 6250,  burnTime: 5000,  station: 'grill',  cookedFrom: 'raw_hotdog' }],
   ['fries',    { id: 'fries',    name: 'Fries',    color: '#f0c040', isRaw: false, cookTime: 7500,  burnTime: 3750,  station: 'fryer', cookedFrom: 'raw_fries' }],
