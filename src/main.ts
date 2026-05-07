@@ -406,8 +406,11 @@ function showPostgameOverlay(): void {
   document.getElementById('pgLobby')!.style.display = lastGameWasPro ? '' : 'none';
   pgFocusIdx = 0;
   document.getElementById('postgameOverlay')!.style.display = 'flex';
-  screen = 'game'; // stop leaderboard loop so loop() doesn't interfere
-  requestAnimationFrame(() => (document.getElementById('pgPlayAgain') as HTMLButtonElement).focus());
+  screen = 'game';
+  (document.getElementById('pgPlayAgain') as HTMLButtonElement).focus();
+  flushFrame();
+  lastTime = performance.now();
+  requestAnimationFrame(loop); // keep the loop alive so arrow-key navigation works
 }
 
 function hidePostgameOverlay(): void {
