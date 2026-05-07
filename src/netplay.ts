@@ -95,9 +95,14 @@ export interface P2InputData {
   ix?: number; iy?: number; // P2 position at moment of interact press
 }
 
+type PlayerSnap = { x: number; y: number; held: GameState['player']['held']; facing: number; walkFrame: number };
+
 export interface GameSnapshot {
-  p:  { x: number; y: number; held: GameState['player']['held']; facing: number; walkFrame: number };
-  p2: { x: number; y: number; held: GameState['player']['held']; facing: number; walkFrame: number } | null;
+  p:  PlayerSnap;
+  p2: PlayerSnap | null;
+  p3: PlayerSnap | null;
+  p4: PlayerSnap | null;
+  playerCount: number;
   stations: Array<{ id: string; slots: GameState['stations'][0]['slots'] }>;
   orders: GameState['orders'];
   plates: GameState['plates'];
@@ -114,23 +119,28 @@ export interface GameSnapshot {
 }
 
 let _syncInterval: ReturnType<typeof setInterval> | null = null;
-let _p2InputRef: ReturnType<typeof ref> | null = null;
+let _inputRefs: Array<ReturnType<typeof ref> | null> = [null, null, null]; // p2, p3, p4
 let _stateRef:   ReturnType<typeof ref> | null = null;
+let _guestSlot = 2; // which slot this guest occupies (2, 3, or 4)
 
 // ── Host ──────────────────────────────────────────────────────────────────────
 
 export function startHostSync(
   lobbyId: string,
   getState: () => GameState | null,
-  onP2Input: (inp: P2InputData) => void,
+  onPlayerInput: (slot: number, inp: P2InputData) => void,
 ): void {
-  _stateRef   = ref(rtdb, `games/${lobbyId}/state`);
-  _p2InputRef = ref(rtdb, `games/${lobbyId}/p2input`);
+  _stateRef = ref(rtdb, `games/${lobbyId}/state`);
   onDisconnect(ref(rtdb, `games/${lobbyId}`)).remove();
-  onValue(_p2InputRef, snap => {
-    const val = snap.val() as P2InputData | null;
-    if (val) onP2Input(val);
-  });
+  for (let slot = 2; slot <= 4; slot++) {
+    const r = ref(rtdb, `games/${lobbyId}/p${slot}input`);
+    _inputRefs[slot - 2] = r;
+    const s = slot; // capture for closure
+    onValue(r, snap => {
+      const val = snap.val() as P2InputData | null;
+      if (val) onPlayerInput(s, val);
+    });
+  }
   _syncInterval = setInterval(() => {
     const gs = getState();
     if (!gs || !_stateRef) return;
@@ -140,15 +150,17 @@ export function startHostSync(
 
 export function stopHostSync(lobbyId: string): void {
   if (_syncInterval) { clearInterval(_syncInterval); _syncInterval = null; }
-  if (_p2InputRef)   { off(_p2InputRef); _p2InputRef = null; }
+  for (const r of _inputRefs) { if (r) off(r); }
+  _inputRefs = [null, null, null];
   set(ref(rtdb, `games/${lobbyId}`), null).catch(() => {});
 }
 
 // ── Guest ─────────────────────────────────────────────────────────────────────
 
-export function startGuestSync(lobbyId: string, onState: (gs: GameState) => void): void {
-  _stateRef   = ref(rtdb, `games/${lobbyId}/state`);
-  _p2InputRef = ref(rtdb, `games/${lobbyId}/p2input`);
+export function startGuestSync(lobbyId: string, slot: number, onState: (gs: GameState) => void): void {
+  _guestSlot = slot;
+  _stateRef  = ref(rtdb, `games/${lobbyId}/state`);
+  _inputRefs[slot - 2] = ref(rtdb, `games/${lobbyId}/p${slot}input`);
   onValue(_stateRef, snap => {
     const val = snap.val() as GameSnapshot | null;
     if (val) onState(snapshotToGameState(val));
@@ -156,12 +168,14 @@ export function startGuestSync(lobbyId: string, onState: (gs: GameState) => void
 }
 
 export function stopGuestSync(): void {
-  if (_stateRef)   { off(_stateRef);   _stateRef   = null; }
-  _p2InputRef = null;
+  if (_stateRef) { off(_stateRef); _stateRef = null; }
+  const r = _inputRefs[_guestSlot - 2];
+  if (r) { off(r); _inputRefs[_guestSlot - 2] = null; }
 }
 
 export function pushGuestInput(inp: P2InputData): void {
-  if (_p2InputRef) set(_p2InputRef, inp).catch(() => {});
+  const r = _inputRefs[_guestSlot - 2];
+  if (r) set(r, inp).catch(() => {});
 }
 
 // ── Snapshot helpers ──────────────────────────────────────────────────────────
@@ -193,10 +207,17 @@ function toSparseArr<T>(v: unknown, len: number): (T | null)[] {
   return result;
 }
 
+function snapP(p: GameState['player']): PlayerSnap {
+  return { x: p.x, y: p.y, held: p.held, facing: p.facing, walkFrame: p.walkFrame };
+}
+
 function buildSnapshot(gs: GameState): GameSnapshot {
   return {
-    p:  { x: gs.player.x,  y: gs.player.y,  held: gs.player.held,  facing: gs.player.facing,  walkFrame: gs.player.walkFrame },
-    p2: gs.player2 ? { x: gs.player2.x, y: gs.player2.y, held: gs.player2.held, facing: gs.player2.facing, walkFrame: gs.player2.walkFrame } : null,
+    p:  snapP(gs.player),
+    p2: gs.player2 ? snapP(gs.player2) : null,
+    p3: gs.player3 ? snapP(gs.player3) : null,
+    p4: gs.player4 ? snapP(gs.player4) : null,
+    playerCount: gs.playerCount,
     stations: gs.stations.map(s => ({ id: s.id, slots: s.slots })),
     orders: gs.orders, plates: gs.plates, staged: gs.staged,
     score: gs.score, level: gs.level, levelTimer: gs.levelTimer,
@@ -210,16 +231,24 @@ function buildSnapshot(gs: GameState): GameSnapshot {
   };
 }
 
+function restoreP(s: PlayerSnap | null) {
+  return s ? { ...s, held: s.held ?? null, vx: 0, vy: 0, radius: 18 } : null;
+}
+
 function snapshotToGameState(snap: GameSnapshot): GameState {
   const stations = buildStations();
   for (const ss of toArr<{ id: string; slots: unknown }>(snap.stations)) {
     const st = stations.find(s => s.id === ss.id);
     if (st) st.slots = toSparseArr(ss.slots, st.slots.length) as GameState['stations'][0]['slots'];
   }
+  const playerCount = snap.playerCount ?? (snap.p2 ? 2 : 1);
   return {
-    player:  { ...snap.p,  held: snap.p.held  ?? null, vx: 0, vy: 0, radius: 18 },
-    player2: snap.p2 ? { ...snap.p2, held: snap.p2.held ?? null, vx: 0, vy: 0, radius: 18 } : null,
-    coop: true, stations,
+    player:  restoreP(snap.p)!,
+    player2: restoreP(snap.p2),
+    player3: restoreP(snap.p3 ?? null),
+    player4: restoreP(snap.p4 ?? null),
+    playerCount,
+    coop: playerCount > 1, stations,
     orders: toArr(snap.orders).map((o: any) => ({ ...o, items: toArr(o.items) })) as GameState['orders'],
     plates: toArr(snap.plates), staged: toArr(snap.staged),
     score: snap.score, level: snap.level, levelTimer: snap.levelTimer, nextOrderIn: 0,

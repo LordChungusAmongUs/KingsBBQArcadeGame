@@ -2,6 +2,7 @@ export const keys: Set<string> = new Set();
 export const input = {
   interactPressed: false,
   interactHeld: false,
+  spacePressed: false,  // raw Space press, unambiguous (not shared with network P2 signal)
 
   menuPickUp:    false,
   menuPickLeft:  false,
@@ -13,6 +14,11 @@ export const input = {
   p2MenuPickLeft:  false,
   p2MenuPickRight: false,
   p2MenuPickDown:  false,
+  // Players 3 & 4 — always remote (online co-op), set by net handlers
+  p3InteractPressed: false,
+  p3MenuPickUp: false, p3MenuPickLeft: false, p3MenuPickRight: false, p3MenuPickDown: false,
+  p4InteractPressed: false,
+  p4MenuPickUp: false, p4MenuPickLeft: false, p4MenuPickRight: false, p4MenuPickDown: false,
 };
 
 let _interactDown = false;
@@ -31,7 +37,7 @@ export function initInput(): void {
     if (e.code === 'KeyD' || e.code === 'ArrowRight') input.menuPickRight = true;
     if (e.code === 'KeyS' || e.code === 'ArrowDown')  input.menuPickDown  = true;
     // P2
-    if (e.code === 'Space') input.p2InteractPressed = true;
+    if (e.code === 'Space') { input.p2InteractPressed = true; input.spacePressed = true; }
     if (e.code === 'ArrowUp')    input.p2MenuPickUp    = true;
     if (e.code === 'ArrowLeft')  input.p2MenuPickLeft  = true;
     if (e.code === 'ArrowRight') input.p2MenuPickRight = true;
@@ -51,7 +57,7 @@ export function virtualKeyDown(code: string): void {
   if (code === 'KeyA' || code === 'ArrowLeft')  input.menuPickLeft  = true;
   if (code === 'KeyD' || code === 'ArrowRight') input.menuPickRight = true;
   if (code === 'KeyS' || code === 'ArrowDown')  input.menuPickDown  = true;
-  if (code === 'Space') input.p2InteractPressed = true;
+  if (code === 'Space') { input.p2InteractPressed = true; input.spacePressed = true; }
 }
 
 export function virtualKeyUp(code: string): void {
@@ -61,6 +67,7 @@ export function virtualKeyUp(code: string): void {
 
 export function flushFrame(): void {
   input.interactPressed = false;
+  input.spacePressed    = false;
 
   input.menuPickUp      = false;
   input.menuPickLeft    = false;
@@ -72,4 +79,8 @@ export function flushFrame(): void {
   input.p2MenuPickLeft  = false;
   input.p2MenuPickRight = false;
   input.p2MenuPickDown  = false;
+  input.p3InteractPressed = false;
+  input.p3MenuPickUp = false; input.p3MenuPickLeft = false; input.p3MenuPickRight = false; input.p3MenuPickDown = false;
+  input.p4InteractPressed = false;
+  input.p4MenuPickUp = false; input.p4MenuPickLeft = false; input.p4MenuPickRight = false; input.p4MenuPickDown = false;
 }

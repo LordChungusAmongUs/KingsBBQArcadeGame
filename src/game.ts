@@ -4,6 +4,14 @@ import { buildStations, tickCooking, nearestStation, distToStation, placeOnStati
 import { input, keys } from './input';
 import { awardXP, incrementStat } from './profile';
 
+// Remote player input — set by net handlers; avoids injecting into the shared keys Set
+export const remoteInput = {
+  useRemote: false,  // true when this machine is an online co-op host
+  p2: { up: false, down: false, left: false, right: false },
+  p3: { up: false, down: false, left: false, right: false },
+  p4: { up: false, down: false, left: false, right: false },
+};
+
 const MEAL_STAT_MAP: Record<string, string> = {
   'Hamburger':        'sold_hamburger',
   'Cheeseburger':     'sold_cheeseburger',
@@ -26,11 +34,15 @@ function onCookingDone(food: FoodId, kind: string): void {
 const MAX_STACK = 2;
 let _orderId = 1;
 
-export function createGame(level: number, carryScore = 0, coop = false, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0): GameState {
+export function createGame(level: number, carryScore = 0, playerCount = 1, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0): GameState {
   const lvl = LEVELS[level - 1];
+  const coop = playerCount > 1;
   const game: GameState = {
     player:  { x: 540, y: 430, vx: 0, vy: 0, held: null, radius: 18, facing: 0, walkFrame: 0 },
-    player2: coop ? { x: 630, y: 430, vx: 0, vy: 0, held: null, radius: 18, facing: Math.PI, walkFrame: 0 } : null,
+    player2: playerCount >= 2 ? { x: 630, y: 430, vx: 0, vy: 0, held: null, radius: 18, facing: Math.PI, walkFrame: 0 } : null,
+    player3: playerCount >= 3 ? { x: 540, y: 540, vx: 0, vy: 0, held: null, radius: 18, facing: 0, walkFrame: 0 } : null,
+    player4: playerCount >= 4 ? { x: 630, y: 540, vx: 0, vy: 0, held: null, radius: 18, facing: Math.PI, walkFrame: 0 } : null,
+    playerCount,
     coop,
     stations: buildStations(),
     orders: [],
@@ -89,7 +101,7 @@ export function tickGame(gs: GameState, dt: number): void {
 
   if (gs.prepTimer > 0) {
     gs.prepTimer = Math.max(0, gs.prepTimer - dt);
-    drainLabor(gs, dt, LABOR_RATE);
+    drainLabor(gs, dt, LABOR_RATE * gs.playerCount);
     tickCooking(gs.stations, dt, onCookingDone);
     tickSmoker(gs);
     tickChop(gs, dt);
@@ -97,14 +109,18 @@ export function tickGame(gs: GameState, dt: number): void {
     tickMenu(gs);
     tickPlayer(gs, dt);
     if (gs.coop && gs.player2) tickPlayer2(gs, dt);
+    if (gs.player3) tickPlayer3(gs, dt);
+    if (gs.player4) tickPlayer4(gs, dt);
     if (input.interactPressed)   doInteract(gs, 1);
     if (input.p2InteractPressed) doInteract(gs, 2);
+    if (input.p3InteractPressed) doInteract(gs, 3);
+    if (input.p4InteractPressed) doInteract(gs, 4);
     return;
   }
 
   gs.levelTimer -= dt;
   const isOvertime = gs.levelTimer <= 0;
-  drainLabor(gs, dt, isOvertime ? OVERTIME_LABOR_RATE : LABOR_RATE);
+  drainLabor(gs, dt, (isOvertime ? OVERTIME_LABOR_RATE : LABOR_RATE) * gs.playerCount);
   if (isOvertime) {
     gs.levelTimer = 0;
 
@@ -130,7 +146,9 @@ export function tickGame(gs: GameState, dt: number): void {
       gs.stations.some(st => st.slots.some(sl => sl.state === 'burned')) ||
       gs.chopOutputSpoiled ||
       gs.player.held?.burned === true ||
-      gs.player2?.held?.burned === true;
+      gs.player2?.held?.burned === true ||
+      gs.player3?.held?.burned === true ||
+      gs.player4?.held?.burned === true;
     const stillWaiting = !noOrders || hasBadFood;
     if (!stillWaiting) {
       if (gs.failed >= gs.maxFails) {
@@ -157,8 +175,12 @@ export function tickGame(gs: GameState, dt: number): void {
   tickMenu(gs);
   tickPlayer(gs, dt);
   if (gs.coop && gs.player2) tickPlayer2(gs, dt);
+  if (gs.player3) tickPlayer3(gs, dt);
+  if (gs.player4) tickPlayer4(gs, dt);
   if (input.interactPressed)   doInteract(gs, 1);
   if (input.p2InteractPressed) doInteract(gs, 2);
+  if (input.p3InteractPressed) doInteract(gs, 3);
+  if (input.p4InteractPressed) doInteract(gs, 4);
 
   // Bankruptcy: $0 or below ends the game immediately
   if (gs.score <= 0 && gs.phase === 'playing') {
@@ -250,24 +272,30 @@ function tickMenu(gs: GameState): void {
 
   const st = gs.stations.find(s => s.id === gs.activeMenu!.stationId);
   const owner = gs.activeMenu.owner;
-  const ownerP = owner === 2 && gs.player2 ? gs.player2 : gs.player;
+  const ownerP = owner === 4 && gs.player4 ? gs.player4
+               : owner === 3 && gs.player3 ? gs.player3
+               : owner === 2 && gs.player2 ? gs.player2
+               : gs.player;
 
   if (!st || distToStation(ownerP.x, ownerP.y, st) > INTERACT_RANGE * 2.5) {
     gs.activeMenu = null;
     return;
   }
 
-  const dirs: Array<['up'|'left'|'right'|'down', boolean]> = owner === 2 ? [
-    ['up',    input.p2MenuPickUp],
-    ['left',  input.p2MenuPickLeft],
-    ['right', input.p2MenuPickRight],
-    ['down',  input.p2MenuPickDown],
-  ] : [
-    ['up',    input.menuPickUp],
-    ['left',  input.menuPickLeft],
-    ['right', input.menuPickRight],
-    ['down',  input.menuPickDown],
-  ];
+  const dirs: Array<['up'|'left'|'right'|'down', boolean]> =
+    owner === 4 ? [
+      ['up',    input.p4MenuPickUp],   ['left',  input.p4MenuPickLeft],
+      ['right', input.p4MenuPickRight],['down',  input.p4MenuPickDown],
+    ] : owner === 3 ? [
+      ['up',    input.p3MenuPickUp],   ['left',  input.p3MenuPickLeft],
+      ['right', input.p3MenuPickRight],['down',  input.p3MenuPickDown],
+    ] : owner === 2 ? [
+      ['up',    input.p2MenuPickUp],   ['left',  input.p2MenuPickLeft],
+      ['right', input.p2MenuPickRight],['down',  input.p2MenuPickDown],
+    ] : [
+      ['up',    input.menuPickUp],     ['left',  input.menuPickLeft],
+      ['right', input.menuPickRight],  ['down',  input.menuPickDown],
+    ];
   const p = ownerP;
 
   // ── Warmer: each physical slot maps to one arrow key ──────────────────────
@@ -465,10 +493,24 @@ function tickPlayer(gs: GameState, dt: number): void {
   }
   const p = gs.player;
   let dx = 0, dy = 0;
-  if (keys.has('KeyW') || (!gs.coop && keys.has('ArrowUp')))    dy -= 1;
-  if (keys.has('KeyS') || (!gs.coop && keys.has('ArrowDown')))  dy += 1;
-  if (keys.has('KeyA') || (!gs.coop && keys.has('ArrowLeft')))  dx -= 1;
-  if (keys.has('KeyD') || (!gs.coop && keys.has('ArrowRight'))) dx += 1;
+  if (remoteInput.useRemote) {
+    // Online co-op host: P1 uses arrow keys (P2/3/4 use separate remoteInput channels)
+    if (keys.has('ArrowUp'))    dy -= 1;
+    if (keys.has('ArrowDown'))  dy += 1;
+    if (keys.has('ArrowLeft'))  dx -= 1;
+    if (keys.has('ArrowRight')) dx += 1;
+  } else if (gs.coop) {
+    // Local co-op: P1 uses WASD, P2 uses arrows
+    if (keys.has('KeyW')) dy -= 1;
+    if (keys.has('KeyS')) dy += 1;
+    if (keys.has('KeyA')) dx -= 1;
+    if (keys.has('KeyD')) dx += 1;
+  } else {
+    if (keys.has('KeyW') || keys.has('ArrowUp'))    dy -= 1;
+    if (keys.has('KeyS') || keys.has('ArrowDown'))  dy += 1;
+    if (keys.has('KeyA') || keys.has('ArrowLeft'))  dx -= 1;
+    if (keys.has('KeyD') || keys.has('ArrowRight')) dx += 1;
+  }
   if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
   if (dx !== 0 || dy !== 0) { p.facing = Math.atan2(dy, dx); p.walkFrame += dt / 180; }
   else { p.walkFrame = 0; }
@@ -486,10 +528,49 @@ function tickPlayer2(gs: GameState, dt: number): void {
   }
   const p = gs.player2;
   let dx = 0, dy = 0;
-  if (keys.has('ArrowUp'))    dy -= 1;
-  if (keys.has('ArrowDown'))  dy += 1;
-  if (keys.has('ArrowLeft'))  dx -= 1;
-  if (keys.has('ArrowRight')) dx += 1;
+  const pk = remoteInput.useRemote ? remoteInput.p2 : { up: keys.has('ArrowUp'), down: keys.has('ArrowDown'), left: keys.has('ArrowLeft'), right: keys.has('ArrowRight') };
+  if (pk.up)    dy -= 1;
+  if (pk.down)  dy += 1;
+  if (pk.left)  dx -= 1;
+  if (pk.right) dx += 1;
+  if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+  if (dx !== 0 || dy !== 0) { p.facing = Math.atan2(dy, dx); p.walkFrame += dt / 180; }
+  else { p.walkFrame = 0; }
+  const spd = PLAYER_SPEED * dt / 1000;
+  p.x = Math.max(40, Math.min(1060, p.x + dx * spd));
+  p.y = Math.max(155, Math.min(690, p.y + dy * spd));
+  resolveCollisions(p, gs.stations);
+}
+
+function tickPlayer3(gs: GameState, dt: number): void {
+  if (!gs.player3) return;
+  if (gs.activeMenu?.owner === 3) { gs.player3.walkFrame = 0; return; }
+  const p = gs.player3;
+  let dx = 0, dy = 0;
+  const pk = remoteInput.p3;
+  if (pk.up)    dy -= 1;
+  if (pk.down)  dy += 1;
+  if (pk.left)  dx -= 1;
+  if (pk.right) dx += 1;
+  if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+  if (dx !== 0 || dy !== 0) { p.facing = Math.atan2(dy, dx); p.walkFrame += dt / 180; }
+  else { p.walkFrame = 0; }
+  const spd = PLAYER_SPEED * dt / 1000;
+  p.x = Math.max(40, Math.min(1060, p.x + dx * spd));
+  p.y = Math.max(155, Math.min(690, p.y + dy * spd));
+  resolveCollisions(p, gs.stations);
+}
+
+function tickPlayer4(gs: GameState, dt: number): void {
+  if (!gs.player4) return;
+  if (gs.activeMenu?.owner === 4) { gs.player4.walkFrame = 0; return; }
+  const p = gs.player4;
+  let dx = 0, dy = 0;
+  const pk = remoteInput.p4;
+  if (pk.up)    dy -= 1;
+  if (pk.down)  dy += 1;
+  if (pk.left)  dx -= 1;
+  if (pk.right) dx += 1;
   if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
   if (dx !== 0 || dy !== 0) { p.facing = Math.atan2(dy, dx); p.walkFrame += dt / 180; }
   else { p.walkFrame = 0; }
@@ -527,8 +608,11 @@ export function resolveCollisions(p: import('./types').Player, stations: import(
 
 const PLATE_SENTINEL = '_plate_' as FoodId;
 
-function doInteract(gs: GameState, playerNum: 1 | 2 = 1): void {
-  const p = playerNum === 2 && gs.player2 ? gs.player2 : gs.player;
+function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
+  const p = playerNum === 4 && gs.player4 ? gs.player4
+          : playerNum === 3 && gs.player3 ? gs.player3
+          : playerNum === 2 && gs.player2 ? gs.player2
+          : gs.player;
   const s = nearestStation(p.x, p.y, gs.stations, INTERACT_RANGE);
   if (!s) return;
 

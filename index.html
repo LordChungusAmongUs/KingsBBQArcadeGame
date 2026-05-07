@@ -502,13 +502,36 @@
       <div id="lobbyToolbar">
         <div id="lobbyActions">
           <button id="lobbyPlaySolo">▶ 1 PLAYER</button>
-          <button id="lobbyPlayCoop">🤝 FIND CO-OP MATCH</button>
+          <button id="lobbyPlayCoop">🤝 QUICK MATCH (2P)</button>
+          <button id="lobbyCreateParty">🎮 CREATE PARTY (2–4P)</button>
+          <button id="lobbyJoinParty">🔑 JOIN PARTY</button>
           <button id="lobbyAchievements">🏆 ACHIEVEMENTS</button>
           <button id="lobbyShop" disabled>🛒 SHOP</button>
+        </div>
+        <div id="joinPartyRow" style="display:none">
+          <input id="joinPartyCode" placeholder="Enter party code..." maxlength="24" style="background:#1a0c04;border:1px solid #f84;color:#f84;padding:0.35rem 0.6rem;font-family:inherit;font-size:0.85rem;border-radius:4px;width:160px"/>
+          <button id="joinPartyBtn">JOIN</button>
+          <button id="joinPartyCancel">✕</button>
         </div>
         <div id="matchmakingStatus">
           <span id="matchmakingText">SEARCHING FOR OPPONENT<span id="matchmakingDots">...</span></span>
           <button id="cancelMatchmakingBtn">CANCEL</button>
+        </div>
+      </div>
+
+      <!-- Party room panel -->
+      <div id="partyPanel" style="display:none;background:#0d0604;border:1px solid #f84;border-radius:6px;padding:0.7rem 1rem;margin:0.4rem 1rem;max-width:440px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
+          <span style="color:#f84;font-weight:bold;letter-spacing:0.1em">PARTY ROOM</span>
+          <div id="partyCodeBlock" style="display:none;font-size:0.8rem;color:#a74">
+            CODE: <strong id="partyCodeVal" style="color:#f84"></strong>
+            <button id="partyCodeCopy" style="margin-left:6px;font-size:0.7rem;padding:1px 6px">COPY</button>
+          </div>
+        </div>
+        <div id="partySlots" style="display:flex;flex-direction:column;gap:4px;margin-bottom:0.6rem"></div>
+        <div style="display:flex;gap:0.5rem">
+          <button id="partyStart" style="display:none;flex:1">▶ START GAME</button>
+          <button id="partyLeave" style="flex:1">✕ LEAVE PARTY</button>
         </div>
       </div>
 

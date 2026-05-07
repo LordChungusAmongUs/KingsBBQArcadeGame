@@ -8,7 +8,7 @@ const GAME_TRACKS = [
   '/audio/game4.mp3',
 ];
 import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp, keys } from './input';
-import { createGame, tickGame, resolveCollisions } from './game';
+import { createGame, tickGame, resolveCollisions, remoteInput } from './game';
 import { initRenderer, render, resizeRenderer, loadSprites, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu, drawTutorialHint, drawTutorialModal, drawGameReport, updateHUDRunStats } from './renderer';
 import type { GameState, CookSlot } from './types';
 import { LEVELS, STARTING_MONEY, PLAYER_SPEED, STAGED_SPOIL_TIME, OVERHEAD_COST } from './config';
@@ -27,7 +27,7 @@ import {
   createLobby, joinLobby, deleteLobby, setLobbyStatus, watchLobby,
   sendGlobalMessage, watchGlobalChat, type GlobalChatMsg,
   sendInvite, respondToInvite, deleteInvite, watchIncomingInvites, watchSentInvite,
-  type InviteData,
+  type InviteData, type LobbyData,
 } from './cloud';
 import {
   startHostSync, stopHostSync, startGuestSync, stopGuestSync, pushGuestInput,
@@ -200,24 +200,29 @@ let pgFocusIdx = 0;
 let isOnlineGame = false, isOnlineHost = false;
 let activeLobbyId: string | null = null;
 let remoteGs: GameState | null = null;
-let guestInteractSeq = 0, hostP2Seq = 0;
+let guestInteractSeq = 0;
+let hostSeqs = [0, 0, 0]; // seq counters for slots 2, 3, 4
 let lastSentInput: P2InputData | null = null;
 let unsubHostLobby: (() => void) | null = null;
-// Guest-side P2 prediction (so guest sees their own movement instantly)
+let guestSlot = 2;         // which player slot this guest occupies (2, 3, or 4)
+let lobbyPlayerCount = 2;  // total players in the current online game (host knows; guest derives from snapshot)
+// Guest-side own-player prediction (so guest sees their own movement instantly)
 let p2PredX: number | null = null;
 let p2PredY: number | null = null;
 let p2PredFacing = 0, p2PredWalk = 0;
-// Last authoritative P2 position received from host (used only when standing still)
+// Last authoritative own-player position received from host (used only when standing still)
 let p2AuthX: number | null = null;
 let p2AuthY: number | null = null;
-// Frames P2 has been stopped; correction is delayed until auth catches up
+// Frames own-player has been stopped; correction is delayed until auth catches up
 let p2StoppedFrames = 0;
 // Guest-side P1 interpolation (smooth P1 between snapshots)
 type P1Sample = { x: number; y: number; facing: number; walkFrame: number; t: number };
 let p1Prev: P1Sample | null = null;
 let p1Curr: P1Sample | null = null;
-// Previous P2 network input — for rising-edge menu-nav detection on host
+// Previous network input per slot — for rising-edge menu-nav detection on host
 let _prevP2: P2InputData = { up: false, down: false, left: false, right: false, interactSeq: 0 };
+let _prevP3: P2InputData = { up: false, down: false, left: false, right: false, interactSeq: 0 };
+let _prevP4: P2InputData = { up: false, down: false, left: false, right: false, interactSeq: 0 };
 
 // ─── Lobby state ──────────────────────────────────────────────────────────────
 
@@ -444,7 +449,8 @@ function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFa
     setTimeout(() => playPlaylist(GAME_TRACKS), 80);
   }
   currentLevel = n; screen = 'game'; isPaused = false;
-  gs = createGame(n, carryScore, isCoop, smokerSlots, carryFailed, thresholdsUnlocked);
+  const pCount = isCoop ? lobbyPlayerCount : 1;
+  gs = createGame(n, carryScore, pCount, smokerSlots, carryFailed, thresholdsUnlocked);
   menu.style.display = 'none';
   touchControls.classList.add('game-active');
   lastTime = performance.now();
@@ -453,27 +459,35 @@ function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFa
 
 // ─── Online co-op ─────────────────────────────────────────────────────────────
 
-function handleP2FromNet(inp: P2InputData): void {
-  if (inp.up)    keys.add('ArrowUp');    else keys.delete('ArrowUp');
-  if (inp.down)  keys.add('ArrowDown');  else keys.delete('ArrowDown');
-  if (inp.left)  keys.add('ArrowLeft');  else keys.delete('ArrowLeft');
-  if (inp.right) keys.add('ArrowRight'); else keys.delete('ArrowRight');
-  // Rising-edge detection for menu navigation (keys Set bypass doesn't fire event listeners)
-  if (inp.up    && !_prevP2.up)    input.p2MenuPickUp    = true;
-  if (inp.down  && !_prevP2.down)  input.p2MenuPickDown  = true;
-  if (inp.left  && !_prevP2.left)  input.p2MenuPickLeft  = true;
-  if (inp.right && !_prevP2.right) input.p2MenuPickRight = true;
-  if (inp.interactSeq !== hostP2Seq) {
-    hostP2Seq = inp.interactSeq;
-    // Warp P2 to where the guest was standing when they pressed interact.
-    // Without this, position drift causes nearestStation to pick the wrong station.
-    if (gs?.player2 && inp.ix !== undefined) {
-      gs.player2.x = inp.ix;
-      gs.player2.y = inp.iy!;
-    }
-    input.p2InteractPressed = true;
+function handlePlayerFromNet(slot: number, inp: P2InputData): void {
+  const ri = slot === 3 ? remoteInput.p3 : slot === 4 ? remoteInput.p4 : remoteInput.p2;
+  ri.up    = inp.up;
+  ri.down  = inp.down;
+  ri.left  = inp.left;
+  ri.right = inp.right;
+
+  const prev  = slot === 3 ? _prevP3 : slot === 4 ? _prevP4 : _prevP2;
+  const menuPickUp    = slot === 3 ? 'p3MenuPickUp'    : slot === 4 ? 'p4MenuPickUp'    : 'p2MenuPickUp'    as any;
+  const menuPickDown  = slot === 3 ? 'p3MenuPickDown'  : slot === 4 ? 'p4MenuPickDown'  : 'p2MenuPickDown'  as any;
+  const menuPickLeft  = slot === 3 ? 'p3MenuPickLeft'  : slot === 4 ? 'p4MenuPickLeft'  : 'p2MenuPickLeft'  as any;
+  const menuPickRight = slot === 3 ? 'p3MenuPickRight' : slot === 4 ? 'p4MenuPickRight' : 'p2MenuPickRight' as any;
+  if (inp.up    && !prev.up)    (input as any)[menuPickUp]    = true;
+  if (inp.down  && !prev.down)  (input as any)[menuPickDown]  = true;
+  if (inp.left  && !prev.left)  (input as any)[menuPickLeft]  = true;
+  if (inp.right && !prev.right) (input as any)[menuPickRight] = true;
+
+  const idx = slot - 2; // 0, 1, or 2
+  if (inp.interactSeq !== hostSeqs[idx]) {
+    hostSeqs[idx] = inp.interactSeq;
+    const pRef = slot === 3 ? gs?.player3 : slot === 4 ? gs?.player4 : gs?.player2;
+    if (pRef && inp.ix !== undefined) { pRef.x = inp.ix; pRef.y = inp.iy!; }
+    const flag = slot === 3 ? 'p3InteractPressed' : slot === 4 ? 'p4InteractPressed' : 'p2InteractPressed';
+    (input as any)[flag] = true;
   }
-  _prevP2 = { ...inp };
+
+  if (slot === 3) _prevP3 = { ...inp };
+  else if (slot === 4) _prevP4 = { ...inp };
+  else _prevP2 = { ...inp };
 }
 
 function cleanupOnlineGame(): void {
@@ -485,20 +499,29 @@ function cleanupOnlineGame(): void {
     stopGuestSync();
   }
   isOnlineGame = false; isOnlineHost = false; activeLobbyId = null;
+  remoteInput.useRemote = false;
+  remoteInput.p2 = { up: false, down: false, left: false, right: false };
+  remoteInput.p3 = { up: false, down: false, left: false, right: false };
+  remoteInput.p4 = { up: false, down: false, left: false, right: false };
   remoteGs = null; lastSentInput = null;
   p2PredX = null; p2PredY = null; p2AuthX = null; p2AuthY = null; p2StoppedFrames = 0;
   p1Prev = null; p1Curr = null;
   _prevP2 = { up: false, down: false, left: false, right: false, interactSeq: 0 };
+  _prevP3 = { up: false, down: false, left: false, right: false, interactSeq: 0 };
+  _prevP4 = { up: false, down: false, left: false, right: false, interactSeq: 0 };
+  hostSeqs = [0, 0, 0]; guestSlot = 2;
   touchControls.classList.remove('game-active');
 }
 
-function startOnlineGame(lobbyId: string, asHost: boolean): void {
+function startOnlineGame(lobbyId: string, asHost: boolean, slot = 2, playerCount = 2): void {
   closeLobbyScreen();
   isOnlineGame = true; isOnlineHost = asHost; activeLobbyId = lobbyId; isProMode = true;
+  guestSlot = slot; lobbyPlayerCount = playerCount;
   if (asHost) {
-    isCoop = true; hostP2Seq = 0;
-    startHostSync(lobbyId, () => gs, handleP2FromNet);
-    startLevel(1, STARTING_MONEY);
+    isCoop = true; hostSeqs = [0, 0, 0];
+    remoteInput.useRemote = true;
+    startHostSync(lobbyId, () => gs, handlePlayerFromNet);
+    startLevel(1, STARTING_MONEY + 2500 * (playerCount - 1));
     if (gs) render(gs); flushFrame();
   } else {
     incrementStat('coop_sessions', 1);
@@ -507,23 +530,20 @@ function startOnlineGame(lobbyId: string, asHost: boolean): void {
     menu.style.display = 'none';
     touchControls.classList.add('game-active');
     remoteGs = null;
-    startGuestSync(lobbyId, gs => {
+    startGuestSync(lobbyId, slot, gs => {
       remoteGs = gs;
-      if (gs.player2) {
+      // Track own player's authoritative position for prediction correction
+      const ownP = slot === 3 ? gs.player3 : slot === 4 ? gs.player4 : gs.player2;
+      if (ownP) {
         if (p2PredX === null) {
-          // First snapshot: initialise prediction from authoritative position
-          p2PredX = gs.player2.x; p2PredY = gs.player2.y;
-          p2PredFacing = gs.player2.facing; p2PredWalk = gs.player2.walkFrame;
+          p2PredX = ownP.x; p2PredY = ownP.y;
+          p2PredFacing = ownP.facing; p2PredWalk = ownP.walkFrame;
         }
-        // Always track the auth reference — correction applied in guestLoop only
-        // when P2 is standing still, so movement is never pulled backward.
-        p2AuthX = gs.player2.x; p2AuthY = gs.player2.y;
+        p2AuthX = ownP.x; p2AuthY = ownP.y;
       }
-      // Feed P1 interpolation: lerp from previous sample toward this one
       p1Prev = p1Curr ?? { x: gs.player.x, y: gs.player.y, facing: gs.player.facing, walkFrame: gs.player.walkFrame, t: Date.now() };
       p1Curr = { x: gs.player.x, y: gs.player.y, facing: gs.player.facing, walkFrame: gs.player.walkFrame, t: Date.now() };
     });
-    // Return to menu if host disconnects
     unsubHostLobby = watchLobby(lobbyId, data => {
       if (!data) { cleanupOnlineGame(); showMenu(); }
     });
@@ -537,10 +557,10 @@ function guestLoop(now: number): void {
   const dt = Math.min(now - lastTime, 100);
   lastTime = now;
   let justInteracted = false;
-  if (input.interactPressed) { guestInteractSeq++; justInteracted = true; }
+  if (input.p2InteractPressed) { guestInteractSeq++; justInteracted = true; }
   const inp: P2InputData = {
-    up: keys.has('KeyW'), down: keys.has('KeyS'),
-    left: keys.has('KeyA'), right: keys.has('KeyD'),
+    up: keys.has('ArrowUp'), down: keys.has('ArrowDown'),
+    left: keys.has('ArrowLeft'), right: keys.has('ArrowRight'),
     interactSeq: guestInteractSeq,
     // Send interact position so host can warp P2 to the right spot
     ...(justInteracted && p2PredX !== null ? { ix: p2PredX, iy: p2PredY! } : {}),
@@ -568,10 +588,10 @@ function guestLoop(now: number): void {
       }};
     }
 
-    // P2 local prediction: advance position at 60fps so guest sees their movement instantly
-    if (displayGs.player2 && p2PredX !== null) {
-      if (remoteGs.activeMenu?.owner === 2) {
-        // P2's cooler/freezer menu is open on host — freeze P2 in place
+    // Local prediction: advance own player position so movement feels instant
+    const ownAuthP = guestSlot === 3 ? displayGs.player3 : guestSlot === 4 ? displayGs.player4 : displayGs.player2;
+    if (ownAuthP && p2PredX !== null) {
+      if (remoteGs.activeMenu?.owner === guestSlot) {
         p2PredWalk = 0;
       } else {
         let dx = 0, dy = 0;
@@ -584,33 +604,24 @@ function guestLoop(now: number): void {
         const spd = PLAYER_SPEED * dt / 1000;
         p2PredX = Math.max(40, Math.min(1060, p2PredX! + dx * spd));
         p2PredY = Math.max(155, Math.min(690, p2PredY! + dy * spd));
-        // Apply same collision resolution as host so P2 stops cleanly at walls/stations
-        const p2tmp = { x: p2PredX, y: p2PredY, radius: 18 } as any;
-        resolveCollisions(p2tmp, remoteGs.stations);
-        p2PredX = p2tmp.x; p2PredY = p2tmp.y;
+        const ptmp = { x: p2PredX, y: p2PredY, radius: 18 } as any;
+        resolveCollisions(ptmp, remoteGs.stations);
+        p2PredX = ptmp.x; p2PredY = ptmp.y;
       }
-      // Only reconcile while standing still so movement is never pulled backward.
-      // Wait 12 frames after stopping before correcting — gives auth position time
-      // to catch up from its latency lag, preventing a backward bounce on stop.
       const isMoving = inp.up || inp.down || inp.left || inp.right;
-      if (isMoving) {
-        p2StoppedFrames = 0;
-      } else {
-        p2StoppedFrames++;
-      }
+      p2StoppedFrames = isMoving ? 0 : p2StoppedFrames + 1;
       if (!isMoving && p2StoppedFrames > 12 && p2AuthX !== null) {
         const err = Math.hypot(p2PredX! - p2AuthX, p2PredY! - p2AuthY!);
-        if (err > 120) {
-          // Only hard-snap for extreme drift (e.g. server-side teleport / interaction)
-          p2PredX = p2AuthX; p2PredY = p2AuthY!;
-        } else if (err > 3) {
-          p2PredX = p2PredX! + (p2AuthX - p2PredX!) * 0.1;
-          p2PredY = p2PredY! + (p2AuthY! - p2PredY!) * 0.1;
-        }
+        if (err > 120)     { p2PredX = p2AuthX; p2PredY = p2AuthY!; }
+        else if (err > 3)  { p2PredX = p2PredX! + (p2AuthX - p2PredX!) * 0.1; p2PredY = p2PredY! + (p2AuthY! - p2PredY!) * 0.1; }
       }
-      displayGs = { ...displayGs, player2: { ...displayGs.player2,
-        x: p2PredX!, y: p2PredY!, facing: p2PredFacing, walkFrame: p2PredWalk,
-      }};
+      const predPatch = { x: p2PredX!, y: p2PredY!, facing: p2PredFacing, walkFrame: p2PredWalk };
+      if (guestSlot === 3 && displayGs.player3)
+        displayGs = { ...displayGs, player3: { ...displayGs.player3, ...predPatch } };
+      else if (guestSlot === 4 && displayGs.player4)
+        displayGs = { ...displayGs, player4: { ...displayGs.player4, ...predPatch } };
+      else if (displayGs.player2)
+        displayGs = { ...displayGs, player2: { ...displayGs.player2, ...predPatch } };
     }
 
     try { render(displayGs); } catch (e) { console.error('[guest render]', e); }
@@ -817,6 +828,8 @@ function loop(now: number): void {
   updateHUDRunStats(runSales, runCOGS, runLabor, runWaste, runOverhead, runSatisfactionSum, runSatisfactionCount);
   // In solo mode, Space bar acts as the primary interact key (clears p2 flag to avoid double-trigger)
   if (!isCoop && input.p2InteractPressed) { input.interactPressed = true; input.p2InteractPressed = false; }
+  // Online co-op host: Space is P1's interact key (spacePressed is unambiguous — not shared with network P2 signal)
+  if (isOnlineGame && isOnlineHost && input.spacePressed) input.interactPressed = true;
   if (screen === 'name_entry') {
     handleNameEntry(); if (gs) render(gs); drawNameEntry(nameChars, nameCursor, lastGameScore, lastGameLevel);
     flushFrame(); requestAnimationFrame(loop); return;
@@ -1024,6 +1037,7 @@ function openLobbyScreen(): void {
 function closeLobbyScreen(): void {
   lobbyScreen.style.display = 'none';
   cancelMatchmakingFn();
+  if (partyLobbyId) leaveParty();
   if (user) clearPresence(user.uid);
   unsubGlobalChat?.(); unsubGlobalChat = null;
   unsubPresence?.();   unsubPresence   = null;
@@ -1119,7 +1133,7 @@ async function handleCancelInvite(): Promise<void> {
 
 async function handleSendInvite(toUid: string, toName: string): Promise<void> {
   if (!user || pendingInviteId) return;
-  const lobbyId  = await createLobby(user.uid, user.displayName ?? 'Player', user.photoURL ?? '');
+  const lobbyId  = await createLobby(user.uid, user.displayName ?? 'Player', user.photoURL ?? '', 2);
   const inviteId = await sendInvite(user.uid, user.displayName ?? 'Player', user.photoURL ?? '', toUid, lobbyId);
   pendingInviteId      = inviteId;
   pendingInviteLobbyId = lobbyId;
@@ -1144,12 +1158,135 @@ async function handleSendInvite(toUid: string, toName: string): Promise<void> {
         if (data?.status === 'starting') {
           unsubHostLobby?.(); unsubHostLobby = null;
           pendingInviteId = null; pendingInviteLobbyId = null; pendingInviteToUid = null;
-          startOnlineGame(invite.lobbyId, true);
+          const pCount = 1 + (data.guestUid ? 1 : 0) + (data.guest2Uid ? 1 : 0) + (data.guest3Uid ? 1 : 0);
+          startOnlineGame(invite.lobbyId, true, 1, pCount);
         }
       });
     }
   });
 }
+
+// ─── Party room (2–4 players) ─────────────────────────────────────────────────
+
+let partyLobbyId: string | null = null;
+let partyIsHost = false;
+let partySlot = 2;
+let unsubPartyLobby: (() => void) | null = null;
+let partyLatestData: LobbyData | null = null;
+
+function renderPartyPanel(data: LobbyData | null): void {
+  partyLatestData = data;
+  const panel = document.getElementById('partyPanel')!;
+  if (!data) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  document.getElementById('lobbyContent')!.style.display = 'none';
+  document.getElementById('lobbyActions')!.style.display  = 'none';
+
+  document.getElementById('partyCodeBlock')!.style.display = partyIsHost ? '' : 'none';
+  document.getElementById('partyCodeVal')!.textContent      = (data.id ?? partyLobbyId ?? '').slice(0, 8).toUpperCase();
+  document.getElementById('partyStart')!.style.display      = partyIsHost ? '' : 'none';
+
+  const maxP = data.maxPlayers ?? 4;
+  const slots = [
+    { label: data.hostName + ' (HOST)', filled: true },
+    { label: data.guestUid  ? data.guestName  ?? 'Player 2' : 'Waiting...', filled: !!data.guestUid },
+    ...(maxP >= 3 ? [{ label: data.guest2Uid ? data.guest2Name ?? 'Player 3' : 'Waiting...', filled: !!data.guest2Uid }] : []),
+    ...(maxP >= 4 ? [{ label: data.guest3Uid ? data.guest3Name ?? 'Player 4' : 'Waiting...', filled: !!data.guest3Uid }] : []),
+  ];
+  document.getElementById('partySlots')!.innerHTML = slots.map((s, i) =>
+    `<div style="padding:3px 6px;border-radius:3px;background:${s.filled ? '#1a0c04' : '#0a0604'};border:1px solid ${s.filled ? '#f84' : '#332'};color:${s.filled ? '#f84' : '#443'};font-size:0.82rem">
+      P${i + 1} ${escHtml(s.label)}
+    </div>`
+  ).join('');
+}
+
+async function openPartyAsHost(): Promise<void> {
+  if (!user) return;
+  partyIsHost = true;
+  partyLobbyId = await createLobby(user.uid, user.displayName ?? 'Player', user.photoURL ?? '', 4);
+  unsubPartyLobby = watchLobby(partyLobbyId, data => {
+    renderPartyPanel(data ? { ...data, id: partyLobbyId! } : null);
+  });
+}
+
+async function joinPartyByCode(code: string): Promise<void> {
+  if (!user) return;
+  const full = code.trim();
+  // Find lobby by ID prefix (we show first 8 chars) — try direct match first
+  const candidates = full.length >= 8 ? [full] : [];
+  // Also search Firestore for matching lobby — for simplicity accept 8+ char codes as full IDs
+  const lobbyId = full;
+  const slot = await joinLobby(lobbyId, user.uid, user.displayName ?? 'Player', user.photoURL ?? '');
+  if (!slot) { alert('Party not found or full.'); return; }
+  partyIsHost = false;
+  partySlot = slot;
+  partyLobbyId = lobbyId;
+  // Show panel immediately with placeholder; real data arrives from watchLobby callback
+  document.getElementById('joinPartyRow')!.style.display = 'none';
+  document.getElementById('partyPanel')!.style.display = 'block';
+  document.getElementById('lobbyContent')!.style.display = 'none';
+
+  unsubPartyLobby = watchLobby(lobbyId, data => {
+    if (!data) { leaveParty(); return; }
+    renderPartyPanel({ ...data, id: lobbyId } as any);
+    if (data.status === 'starting') {
+      const pCount = 1 + (data.guestUid ? 1 : 0) + (data.guest2Uid ? 1 : 0) + (data.guest3Uid ? 1 : 0);
+      leavePartyCleanup();
+      startOnlineGame(lobbyId, false, slot, pCount);
+    }
+  });
+}
+
+function leavePartyCleanup(): void {
+  unsubPartyLobby?.(); unsubPartyLobby = null;
+  partyLobbyId = null; partyIsHost = false;
+  const panel = document.getElementById('partyPanel')!;
+  panel.style.display = 'none';
+  document.getElementById('lobbyContent')!.style.display = 'flex';
+  document.getElementById('lobbyActions')!.style.display  = 'flex';
+}
+
+function leaveParty(): void {
+  if (partyLobbyId && partyIsHost) deleteLobby(partyLobbyId).catch(() => {});
+  partyLobbyId = null;
+  leavePartyCleanup();
+}
+
+document.getElementById('partyCodeCopy')?.addEventListener('click', () => {
+  navigator.clipboard?.writeText(partyLobbyId ?? '').catch(() => {});
+});
+
+document.getElementById('partyStart')?.addEventListener('click', async () => {
+  if (!partyLobbyId || !partyIsHost) return;
+  const data = partyLatestData;
+  const pCount = data ? 1 + (data.guestUid ? 1 : 0) + (data.guest2Uid ? 1 : 0) + (data.guest3Uid ? 1 : 0) : 1;
+  const startLobbyId = partyLobbyId;
+  await setLobbyStatus(startLobbyId, 'starting');
+  leavePartyCleanup(); // clears partyLobbyId so closeLobbyScreen won't delete it
+  startOnlineGame(startLobbyId, true, 1, pCount);
+});
+
+document.getElementById('partyLeave')?.addEventListener('click', leaveParty);
+
+document.getElementById('lobbyCreateParty')?.addEventListener('click', async () => {
+  if (!user) return;
+  document.getElementById('lobbyActions')!.style.display = 'none';
+  await openPartyAsHost();
+});
+
+document.getElementById('lobbyJoinParty')?.addEventListener('click', () => {
+  document.getElementById('lobbyActions')!.style.display = 'none';
+  document.getElementById('joinPartyRow')!.style.display = 'flex';
+  document.getElementById('joinPartyCode')!.focus();
+});
+document.getElementById('joinPartyBtn')?.addEventListener('click', () => {
+  const code = (document.getElementById('joinPartyCode') as HTMLInputElement).value.trim();
+  if (code) joinPartyByCode(code);
+});
+document.getElementById('joinPartyCancel')?.addEventListener('click', () => {
+  document.getElementById('joinPartyRow')!.style.display = 'none';
+  document.getElementById('lobbyActions')!.style.display = 'flex';
+});
 
 function handleIncomingInvites(invites: InviteData[]): void {
   receivedInvites = invites;
@@ -1169,11 +1306,11 @@ function showInviteBanner(invite: InviteData | null): void {
 async function handleAcceptInvite(invite: InviteData): Promise<void> {
   if (!user) return;
   showInviteBanner(null);
-  const ok = await joinLobby(invite.lobbyId, user.uid, user.displayName ?? 'Player', user.photoURL ?? '');
-  if (!ok) return;
+  const slot = await joinLobby(invite.lobbyId, user.uid, user.displayName ?? 'Player', user.photoURL ?? '');
+  if (!slot) return;
   await respondToInvite(invite.id, 'accepted');
   await setLobbyStatus(invite.lobbyId, 'starting');
-  startOnlineGame(invite.lobbyId, false);
+  startOnlineGame(invite.lobbyId, false, slot);
 }
 
 async function handleDeclineInvite(invite: InviteData): Promise<void> {
@@ -1190,23 +1327,26 @@ function renderMatchmakingUI(): void {
 
 async function startMatchmakingFn(): Promise<void> {
   if (!user || isMatchmaking) return;
+  const u = user;
   isMatchmaking = true;
   renderMatchmakingUI();
   try {
-    const claimed = await seekMatch(user.uid, user.displayName ?? 'Player', user.photoURL ?? '');
+    const claimed = await seekMatch(u.uid, u.displayName ?? 'Player', u.photoURL ?? '');
     if (!isMatchmaking) return; // cancelled during async await
     if (claimed) {
       // We claimed a waiting player — we're the host
-      const lobbyId = await createLobby(user.uid, user.displayName ?? 'Player', user.photoURL ?? '');
+      const lobbyId = await createLobby(u.uid, u.displayName ?? 'Player', u.photoURL ?? '', 2);
       await notifyMatch(claimed.uid, lobbyId);
       isMatchmaking = false;
-      startOnlineGame(lobbyId, true);
+      startOnlineGame(lobbyId, true, 1, 2);
     } else {
       // We're now waiting in the queue — watch for host to notify us
-      stopMatchwatch = watchForMatch(user.uid, lobbyId => {
+      stopMatchwatch = watchForMatch(u.uid, async lobbyId => {
         isMatchmaking = false;
         stopMatchwatch = null;
-        startOnlineGame(lobbyId, false);
+        const slot = await joinLobby(lobbyId, u.uid, u.displayName ?? 'Player', u.photoURL ?? '');
+        if (slot) startOnlineGame(lobbyId, false, slot, 2);
+        else showMenu();
       });
     }
   } catch {
@@ -1243,7 +1383,7 @@ document.getElementById('globalChatInput')!.addEventListener('keydown', e => {
   if (e.key === 'Enter') handleGlobalSend();
 });
 document.getElementById('lobbyPlaySolo')!.addEventListener('click', () => {
-  closeLobbyScreen(); isCoop = false; isProMode = true; startLevel(1, STARTING_MONEY);
+  closeLobbyScreen(); isCoop = false; lobbyPlayerCount = 1; isProMode = true; startLevel(1, STARTING_MONEY);
   if (gs) render(gs); flushFrame();
 });
 document.getElementById('lobbyPlayCoop')!.addEventListener('click', startMatchmakingFn);

@@ -33,27 +33,45 @@ export async function loadCloudLeaderboard(): Promise<CloudEntry[]> {
 export interface LobbyData {
   id: string;
   hostUid: string; hostName: string; hostPhoto: string;
-  guestUid: string | null; guestName: string | null; guestPhoto: string | null;
+  guestUid:  string | null; guestName:  string | null; guestPhoto:  string | null;  // slot 2
+  guest2Uid: string | null; guest2Name: string | null; guest2Photo: string | null;  // slot 3
+  guest3Uid: string | null; guest3Name: string | null; guest3Photo: string | null;  // slot 4
+  maxPlayers: number;
   status: 'waiting' | 'starting' | 'closed';
 }
 
-export async function createLobby(uid: string, name: string, photo: string): Promise<string> {
+export async function createLobby(uid: string, name: string, photo: string, maxPlayers = 4): Promise<string> {
   const ref = await addDoc(collection(db, 'lobbies'), {
     hostUid: uid, hostName: name, hostPhoto: photo,
     guestUid: null, guestName: null, guestPhoto: null,
-    status: 'waiting', createdAt: serverTimestamp(),
+    guest2Uid: null, guest2Name: null, guest2Photo: null,
+    guest3Uid: null, guest3Name: null, guest3Photo: null,
+    maxPlayers, status: 'waiting', createdAt: serverTimestamp(),
   });
   return ref.id;
 }
 
-export async function joinLobby(lobbyId: string, uid: string, name: string, photo: string): Promise<boolean> {
+// Returns the slot number taken (2, 3, or 4), or 0 if the lobby is full / not found.
+export async function joinLobby(lobbyId: string, uid: string, name: string, photo: string): Promise<number> {
   const r = doc(db, 'lobbies', lobbyId);
   const snap = await getDoc(r);
-  if (!snap.exists()) return false;
+  if (!snap.exists()) return 0;
   const data = snap.data() as LobbyData;
-  if (data.hostUid === uid || data.guestUid || data.status !== 'waiting') return false;
-  await updateDoc(r, { guestUid: uid, guestName: name, guestPhoto: photo });
-  return true;
+  if (data.hostUid === uid || data.status !== 'waiting') return 0;
+  const maxPlayers = data.maxPlayers ?? 2;
+  if (!data.guestUid && maxPlayers >= 2) {
+    await updateDoc(r, { guestUid: uid, guestName: name, guestPhoto: photo });
+    return 2;
+  }
+  if (!data.guest2Uid && maxPlayers >= 3) {
+    await updateDoc(r, { guest2Uid: uid, guest2Name: name, guest2Photo: photo });
+    return 3;
+  }
+  if (!data.guest3Uid && maxPlayers >= 4) {
+    await updateDoc(r, { guest3Uid: uid, guest3Name: name, guest3Photo: photo });
+    return 4;
+  }
+  return 0;
 }
 
 export async function deleteLobby(lobbyId: string): Promise<void> {

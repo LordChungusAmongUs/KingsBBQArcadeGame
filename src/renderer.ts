@@ -107,13 +107,15 @@ function drawKitchenFloor(): void {
 
 function drawStations(gs: GameState): void {
   const nearSt  = nearestStation(gs.player.x,  gs.player.y,  gs.stations, INTERACT_RANGE);
-  const nearSt2 = gs.player2
-    ? nearestStation(gs.player2.x, gs.player2.y, gs.stations, INTERACT_RANGE)
-    : null;
+  const nearSt2 = gs.player2 ? nearestStation(gs.player2.x, gs.player2.y, gs.stations, INTERACT_RANGE) : null;
+  const nearSt3 = gs.player3 ? nearestStation(gs.player3.x, gs.player3.y, gs.stations, INTERACT_RANGE) : null;
+  const nearSt4 = gs.player4 ? nearestStation(gs.player4.x, gs.player4.y, gs.stations, INTERACT_RANGE) : null;
 
   for (const s of gs.stations) {
     const hl1 = s === nearSt;
     const hl2 = s === nearSt2;
+    const hl3 = s === nearSt3;
+    const hl4 = s === nearSt4;
 
     if (s.kind === 'supply') continue; // no supply stations in current layout
 
@@ -134,6 +136,16 @@ function drawStations(gs: GameState): void {
       ctx.strokeStyle = '#44aaff';
       ctx.lineWidth = 2;
       ctx.strokeRect(s.x + 3, s.y + 3, s.w - 6, s.h - 6);
+    }
+    if (hl3) {
+      ctx.strokeStyle = '#44cc44';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(s.x + 5, s.y + 5, s.w - 10, s.h - 10);
+    }
+    if (hl4) {
+      ctx.strokeStyle = '#f0c020';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(s.x + 7, s.y + 7, s.w - 14, s.h - 14);
     }
 
     // Label
@@ -661,6 +673,8 @@ function spriteFrame(wf: number, menuOpen: boolean, dir: 'up' | 'down' | 'left' 
 function drawPlayer(gs: GameState): void {
   drawPlayerSprite(gs.player, '#c8402a', gs.activeMenu?.owner === 1);
   if (gs.coop && gs.player2) drawPlayerSprite(gs.player2, '#2060c8', gs.activeMenu?.owner === 2);
+  if (gs.player3) drawPlayerSprite(gs.player3, '#28a028', gs.activeMenu?.owner === 3);
+  if (gs.player4) drawPlayerSprite(gs.player4, '#c8a020', gs.activeMenu?.owner === 4);
 }
 
 function drawPlayerSprite(p: import('./types').Player, apronColor: string, menuOpen = false): void {
