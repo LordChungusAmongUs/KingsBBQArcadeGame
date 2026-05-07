@@ -661,6 +661,7 @@ function doInteract(gs: GameState, playerNum: 1 | 2 = 1): void {
     if (gs.chopOutput > 0) {
       if (gs.chopOutputSpoiled) {
         if (p.held === null) { p.held = { food: 'pork', count: 1, burned: true }; gs.chopOutput--; }
+        else if (p.held.food === 'pork' && p.held.burned && p.held.count < MAX_STACK) { p.held.count++; gs.chopOutput--; }
       } else if (p.held === null || (p.held.food === 'pork' && !p.held.burned && p.held.count < MAX_STACK)) {
         if (p.held === null) p.held = { food: 'pork', count: 1, burned: false };
         else p.held.count++;
