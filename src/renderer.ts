@@ -885,33 +885,36 @@ function drawHUD(gs: GameState): void {
   ctx.textAlign = 'right';
   let y = 147;
 
-  // ── LVL + XP bar (top of HUD) ────────────────────────────────────────────
+  // ── STAGE (game level) — top of HUD ──────────────────────────────────────
+  ctx.font = 'bold 30px monospace';
+  ctx.fillStyle = '#ffd';
+  ctx.fillText(`STAGE ${gs.level}`, hudX, y); y += 14;
+
+  // ── Account rank + XP bar ─────────────────────────────────────────────────
   const prof = getProfile();
   const xpp  = prof ? xpProgress(prof.xp) : null;
 
-  ctx.font = 'bold 30px monospace';
-  ctx.fillStyle = '#ffd';
-  ctx.fillText(`LVL ${xpp ? xpp.level : gs.level}`, hudX, y); y += 10;
+  ctx.font = '10px monospace'; ctx.fillStyle = '#668';
+  ctx.fillText(`RANK ${xpp ? xpp.level : '--'}`, hudX, y); y += 4;
 
-  // XP progress bar
-  const barW = 170, barH = 8;
+  const barW = 170, barH = 7;
   const barX = hudX - barW;
   const xpFrac = xpp ? Math.min(1, xpp.current / Math.max(1, xpp.needed)) : 0;
   ctx.fillStyle = '#222';
   ctx.fillRect(barX, y, barW, barH);
   ctx.fillStyle = '#4af';
   ctx.fillRect(barX, y, Math.round(barW * xpFrac), barH);
-  ctx.strokeStyle = '#446'; ctx.lineWidth = 1;
+  ctx.strokeStyle = '#335'; ctx.lineWidth = 1;
   ctx.strokeRect(barX, y, barW, barH);
-  y += barH + 4;
+  y += barH + 3;
 
-  ctx.font = '10px monospace'; ctx.fillStyle = '#6af';
+  ctx.font = '9px monospace'; ctx.fillStyle = '#4af';
   if (xpp && xpp.level < 20) {
-    ctx.fillText(`${xpp.current} / ${xpp.needed} XP`, hudX, y);
+    ctx.fillText(`${xpp.current}/${xpp.needed} XP`, hudX, y);
   } else if (xpp) {
-    ctx.fillText('MAX LEVEL', hudX, y);
+    ctx.fillText('MAX RANK', hudX, y);
   }
-  y += 14;
+  y += 13;
 
   // Divider
   ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
