@@ -1,4 +1,13 @@
 export const keys: Set<string> = new Set();
+
+// Dash detection — event-level (reliable; not frame-by-frame)
+const _wasdRel  = { up: 0, down: 0, left: 0, right: 0 };
+const _arrowRel = { up: 0, down: 0, left: 0, right: 0 };
+const DASH_WIN  = 300; // ms window to re-press after release
+
+export const wasdDash  = { dx: 0, dy: 0, active: false };
+export const arrowDash = { dx: 0, dy: 0, active: false };
+
 export const input = {
   interactPressed: false,
   interactHeld: false,
@@ -42,10 +51,30 @@ export function initInput(): void {
     if (e.code === 'ArrowLeft')  input.p2MenuPickLeft  = true;
     if (e.code === 'ArrowRight') input.p2MenuPickRight = true;
     if (e.code === 'ArrowDown')  input.p2MenuPickDown  = true;
+    // Dash: fire if same direction was released within window
+    const _t = Date.now();
+    if (e.code === 'KeyW'       && _t - _wasdRel.up    < DASH_WIN) { wasdDash.dx=0;  wasdDash.dy=-1; wasdDash.active=true; }
+    if (e.code === 'KeyS'       && _t - _wasdRel.down  < DASH_WIN) { wasdDash.dx=0;  wasdDash.dy=1;  wasdDash.active=true; }
+    if (e.code === 'KeyA'       && _t - _wasdRel.left  < DASH_WIN) { wasdDash.dx=-1; wasdDash.dy=0;  wasdDash.active=true; }
+    if (e.code === 'KeyD'       && _t - _wasdRel.right < DASH_WIN) { wasdDash.dx=1;  wasdDash.dy=0;  wasdDash.active=true; }
+    if (e.code === 'ArrowUp'    && _t - _arrowRel.up    < DASH_WIN) { arrowDash.dx=0;  arrowDash.dy=-1; arrowDash.active=true; }
+    if (e.code === 'ArrowDown'  && _t - _arrowRel.down  < DASH_WIN) { arrowDash.dx=0;  arrowDash.dy=1;  arrowDash.active=true; }
+    if (e.code === 'ArrowLeft'  && _t - _arrowRel.left  < DASH_WIN) { arrowDash.dx=-1; arrowDash.dy=0;  arrowDash.active=true; }
+    if (e.code === 'ArrowRight' && _t - _arrowRel.right < DASH_WIN) { arrowDash.dx=1;  arrowDash.dy=0;  arrowDash.active=true; }
   });
   window.addEventListener('keyup', e => {
     keys.delete(e.code);
     if (e.code === 'KeyE') _interactDown = false;
+    // Record release times for dash detection
+    const _t = Date.now();
+    if (e.code === 'KeyW')      _wasdRel.up    = _t;
+    if (e.code === 'KeyS')      _wasdRel.down  = _t;
+    if (e.code === 'KeyA')      _wasdRel.left  = _t;
+    if (e.code === 'KeyD')      _wasdRel.right = _t;
+    if (e.code === 'ArrowUp')    _arrowRel.up    = _t;
+    if (e.code === 'ArrowDown')  _arrowRel.down  = _t;
+    if (e.code === 'ArrowLeft')  _arrowRel.left  = _t;
+    if (e.code === 'ArrowRight') _arrowRel.right = _t;
   });
 }
 
@@ -68,6 +97,8 @@ export function virtualKeyUp(code: string): void {
 export function flushFrame(): void {
   input.interactPressed = false;
   input.spacePressed    = false;
+  wasdDash.active  = false;
+  arrowDash.active = false;
 
   input.menuPickUp      = false;
   input.menuPickLeft    = false;

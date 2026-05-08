@@ -1,7 +1,7 @@
 import type { GameState, Order, FoodId, HeldItem, StagedItem, CookSlot } from './types';
 import { LEVELS, ORDERS, FOOD, MEAL_PRICES, INTERACT_RANGE, PLAYER_SPEED, PARTIAL_SPOIL_TIME, STAGED_SPOIL_TIME, LABOR_RATE, OVERTIME_LABOR_RATE, BASE_MAX_FAILS, UPSET_THRESHOLDS, ORDER_DEFS } from './config';
 import { buildStations, tickCooking, nearestStation, distToStation, placeOnStation, pickupFromStation } from './kitchen';
-import { input, keys } from './input';
+import { input, keys, wasdDash, arrowDash } from './input';
 import { awardXP, incrementStat } from './profile';
 
 // Remote player input — set by net handlers; avoids injecting into the shared keys Set
@@ -11,6 +11,17 @@ export const remoteInput = {
   p3: { up: false, down: false, left: false, right: false },
   p4: { up: false, down: false, left: false, right: false },
 };
+
+// ── Dash mechanic ─────────────────────────────────────────────────────────────
+const DASH_DISTANCE = 240; // ~4 floor tiles at 2× speed
+
+interface _DashState { remaining: number; dx: number; dy: number; }
+const _dash: _DashState[] = Array.from({ length: 4 }, () => ({ remaining: 0, dx: 0, dy: 0 }));
+
+export function triggerDash(slot: number, dx: number, dy: number): void {
+  if (slot < 0 || slot > 3) return;
+  const d = _dash[slot]; d.dx = dx; d.dy = dy; d.remaining = DASH_DISTANCE;
+}
 
 const MEAL_STAT_MAP: Record<string, string> = {
   'Hamburger':        'sold_hamburger',
@@ -94,6 +105,7 @@ export function createGame(level: number, carryScore = 0, playerCount = 1, smoke
     const smoker = game.stations.find(s => s.kind === 'smoker');
     if (smoker) smoker.slots = smokerSlots.map(sl => ({ ...sl }));
   }
+  for (let i = 0; i < 4; i++) _dash[i].remaining = 0;
   return game;
 }
 
@@ -509,29 +521,41 @@ function tickPlayer(gs: GameState, dt: number): void {
     return;
   }
   const p = gs.player;
-  let dx = 0, dy = 0;
+  let up = false, dn = false, lt = false, rt = false;
   if (remoteInput.useRemote) {
-    // Online co-op host: P1 uses arrow keys (P2/3/4 use separate remoteInput channels)
-    if (keys.has('ArrowUp'))    dy -= 1;
-    if (keys.has('ArrowDown'))  dy += 1;
-    if (keys.has('ArrowLeft'))  dx -= 1;
-    if (keys.has('ArrowRight')) dx += 1;
+    // Online co-op host: P1 uses arrow keys
+    up = keys.has('ArrowUp'); dn = keys.has('ArrowDown'); lt = keys.has('ArrowLeft'); rt = keys.has('ArrowRight');
   } else if (gs.coop) {
-    // Local co-op: P1 uses WASD, P2 uses arrows
-    if (keys.has('KeyW')) dy -= 1;
-    if (keys.has('KeyS')) dy += 1;
-    if (keys.has('KeyA')) dx -= 1;
-    if (keys.has('KeyD')) dx += 1;
+    // Local co-op: P1 uses WASD
+    up = keys.has('KeyW'); dn = keys.has('KeyS'); lt = keys.has('KeyA'); rt = keys.has('KeyD');
   } else {
-    if (keys.has('KeyW') || keys.has('ArrowUp'))    dy -= 1;
-    if (keys.has('KeyS') || keys.has('ArrowDown'))  dy += 1;
-    if (keys.has('KeyA') || keys.has('ArrowLeft'))  dx -= 1;
-    if (keys.has('KeyD') || keys.has('ArrowRight')) dx += 1;
+    up = keys.has('KeyW') || keys.has('ArrowUp'); dn = keys.has('KeyS') || keys.has('ArrowDown');
+    lt = keys.has('KeyA') || keys.has('ArrowLeft'); rt = keys.has('KeyD') || keys.has('ArrowRight');
   }
-  if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+  // Consume dash trigger (event-driven from input.ts)
+  if (remoteInput.useRemote) {
+    if (arrowDash.active) { triggerDash(0, arrowDash.dx, arrowDash.dy); arrowDash.active = false; }
+  } else if (gs.coop) {
+    if (wasdDash.active) { triggerDash(0, wasdDash.dx, wasdDash.dy); wasdDash.active = false; }
+  } else {
+    if (wasdDash.active) { triggerDash(0, wasdDash.dx, wasdDash.dy); wasdDash.active = false; }
+    else if (arrowDash.active) { triggerDash(0, arrowDash.dx, arrowDash.dy); arrowDash.active = false; }
+  }
+  const dash = _dash[0];
+  let dx = 0, dy = 0, spd: number;
+  const held0 = (dash.dx < 0 && lt) || (dash.dx > 0 && rt) || (dash.dy < 0 && up) || (dash.dy > 0 && dn);
+  if (dash.remaining > 0 && held0) {
+    dx = dash.dx; dy = dash.dy;
+    spd = PLAYER_SPEED * 2 * dt / 1000;
+    dash.remaining = Math.max(0, dash.remaining - spd);
+  } else {
+    if (!held0) dash.remaining = 0;
+    if (up) dy -= 1; if (dn) dy += 1; if (lt) dx -= 1; if (rt) dx += 1;
+    if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+    spd = PLAYER_SPEED * dt / 1000;
+  }
   if (dx !== 0 || dy !== 0) { p.facing = Math.atan2(dy, dx); p.walkFrame += dt / 180; }
   else { p.walkFrame = 0; }
-  const spd = PLAYER_SPEED * dt / 1000;
   p.x = Math.max(40, Math.min(1060, p.x + dx * spd));
   p.y = Math.max(155, Math.min(690, p.y + dy * spd));
   resolveCollisions(p, gs.stations);
@@ -544,16 +568,24 @@ function tickPlayer2(gs: GameState, dt: number): void {
     return;
   }
   const p = gs.player2;
-  let dx = 0, dy = 0;
   const pk = remoteInput.useRemote ? remoteInput.p2 : { up: keys.has('ArrowUp'), down: keys.has('ArrowDown'), left: keys.has('ArrowLeft'), right: keys.has('ArrowRight') };
-  if (pk.up)    dy -= 1;
-  if (pk.down)  dy += 1;
-  if (pk.left)  dx -= 1;
-  if (pk.right) dx += 1;
-  if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+  // Local coop P2 gets arrowDash; online P2 gets triggerDash via network
+  if (!remoteInput.useRemote && arrowDash.active) { triggerDash(1, arrowDash.dx, arrowDash.dy); arrowDash.active = false; }
+  const dash = _dash[1];
+  let dx = 0, dy = 0, spd: number;
+  const held1 = (dash.dx < 0 && pk.left) || (dash.dx > 0 && pk.right) || (dash.dy < 0 && pk.up) || (dash.dy > 0 && pk.down);
+  if (dash.remaining > 0 && held1) {
+    dx = dash.dx; dy = dash.dy;
+    spd = PLAYER_SPEED * 2 * dt / 1000;
+    dash.remaining = Math.max(0, dash.remaining - spd);
+  } else {
+    if (!held1) dash.remaining = 0;
+    if (pk.up) dy -= 1; if (pk.down) dy += 1; if (pk.left) dx -= 1; if (pk.right) dx += 1;
+    if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+    spd = PLAYER_SPEED * dt / 1000;
+  }
   if (dx !== 0 || dy !== 0) { p.facing = Math.atan2(dy, dx); p.walkFrame += dt / 180; }
   else { p.walkFrame = 0; }
-  const spd = PLAYER_SPEED * dt / 1000;
   p.x = Math.max(40, Math.min(1060, p.x + dx * spd));
   p.y = Math.max(155, Math.min(690, p.y + dy * spd));
   resolveCollisions(p, gs.stations);
@@ -563,16 +595,22 @@ function tickPlayer3(gs: GameState, dt: number): void {
   if (!gs.player3) return;
   if (gs.activeMenu?.owner === 3) { gs.player3.walkFrame = 0; return; }
   const p = gs.player3;
-  let dx = 0, dy = 0;
   const pk = remoteInput.p3;
-  if (pk.up)    dy -= 1;
-  if (pk.down)  dy += 1;
-  if (pk.left)  dx -= 1;
-  if (pk.right) dx += 1;
-  if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+  const dash = _dash[2];
+  let dx = 0, dy = 0, spd: number;
+  const held2 = (dash.dx < 0 && pk.left) || (dash.dx > 0 && pk.right) || (dash.dy < 0 && pk.up) || (dash.dy > 0 && pk.down);
+  if (dash.remaining > 0 && held2) {
+    dx = dash.dx; dy = dash.dy;
+    spd = PLAYER_SPEED * 2 * dt / 1000;
+    dash.remaining = Math.max(0, dash.remaining - spd);
+  } else {
+    if (!held2) dash.remaining = 0;
+    if (pk.up) dy -= 1; if (pk.down) dy += 1; if (pk.left) dx -= 1; if (pk.right) dx += 1;
+    if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+    spd = PLAYER_SPEED * dt / 1000;
+  }
   if (dx !== 0 || dy !== 0) { p.facing = Math.atan2(dy, dx); p.walkFrame += dt / 180; }
   else { p.walkFrame = 0; }
-  const spd = PLAYER_SPEED * dt / 1000;
   p.x = Math.max(40, Math.min(1060, p.x + dx * spd));
   p.y = Math.max(155, Math.min(690, p.y + dy * spd));
   resolveCollisions(p, gs.stations);
@@ -582,16 +620,22 @@ function tickPlayer4(gs: GameState, dt: number): void {
   if (!gs.player4) return;
   if (gs.activeMenu?.owner === 4) { gs.player4.walkFrame = 0; return; }
   const p = gs.player4;
-  let dx = 0, dy = 0;
   const pk = remoteInput.p4;
-  if (pk.up)    dy -= 1;
-  if (pk.down)  dy += 1;
-  if (pk.left)  dx -= 1;
-  if (pk.right) dx += 1;
-  if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+  const dash = _dash[3];
+  let dx = 0, dy = 0, spd: number;
+  const held3 = (dash.dx < 0 && pk.left) || (dash.dx > 0 && pk.right) || (dash.dy < 0 && pk.up) || (dash.dy > 0 && pk.down);
+  if (dash.remaining > 0 && held3) {
+    dx = dash.dx; dy = dash.dy;
+    spd = PLAYER_SPEED * 2 * dt / 1000;
+    dash.remaining = Math.max(0, dash.remaining - spd);
+  } else {
+    if (!held3) dash.remaining = 0;
+    if (pk.up) dy -= 1; if (pk.down) dy += 1; if (pk.left) dx -= 1; if (pk.right) dx += 1;
+    if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
+    spd = PLAYER_SPEED * dt / 1000;
+  }
   if (dx !== 0 || dy !== 0) { p.facing = Math.atan2(dy, dx); p.walkFrame += dt / 180; }
   else { p.walkFrame = 0; }
-  const spd = PLAYER_SPEED * dt / 1000;
   p.x = Math.max(40, Math.min(1060, p.x + dx * spd));
   p.y = Math.max(155, Math.min(690, p.y + dy * spd));
   resolveCollisions(p, gs.stations);
