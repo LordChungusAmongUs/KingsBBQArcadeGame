@@ -144,6 +144,18 @@ export function awardXP(amount: number): void {
   _checkEarlyLevelUp();
 }
 
+// Total XP including in-session pending — use this for the live XP bar.
+export function getTotalXP(): number {
+  return (_profile?.xp ?? 0) + _pendingXP;
+}
+
+// Wipe pending XP without saving — used when ending a session with no reward (inactivity).
+export function clearPendingXP(): void {
+  _pendingXP = 0;
+  _dirty = false;
+  _notifiedLevel = 0;
+}
+
 // ── Stats & achievements ──────────────────────────────────────────────────────
 
 export function incrementStat(key: string, amount: number): void {

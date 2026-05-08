@@ -2,7 +2,7 @@ import type { GameState, Station, Order, FoodId, CookSlot, StagedItem } from './
 import { FOOD, LEVELS, INTERACT_RANGE, PARTIAL_SPOIL_TIME, STAGED_SPOIL_TIME, OVERHEAD_COST } from './config';
 import { nearestStation } from './kitchen';
 import { getFloats, tickFloats } from './effects';
-import { xpProgress, getProfile } from './profile';
+import { xpProgress, getProfile, getTotalXP } from './profile';
 
 // ─── Order name abbreviations ─────────────────────────────────────────────────
 
@@ -892,7 +892,7 @@ function drawHUD(gs: GameState): void {
 
   // ── Account rank + XP bar ─────────────────────────────────────────────────
   const prof = getProfile();
-  const xpp  = prof ? xpProgress(prof.xp) : null;
+  const xpp  = prof ? xpProgress(getTotalXP()) : null;
 
   ctx.font = '10px monospace'; ctx.fillStyle = '#668';
   ctx.fillText(`RANK ${xpp ? xpp.level : '--'}`, hudX, y); y += 4;

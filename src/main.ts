@@ -20,7 +20,7 @@ import {
   loadProfile, clearProfile, flushSession, getProfile,
   setOnLevelUp, setOnEarlyLevelUp, setOnAchievementUnlocked,
   incrementStat, recordMaxStat,
-  xpProgress, ACHIEVEMENTS,
+  xpProgress, ACHIEVEMENTS, clearPendingXP,
   type UserProfile,
 } from './profile';
 import {
@@ -60,7 +60,7 @@ function initTouchControls(): void {
   function bindKey(id: string, code: string): void {
     const el = document.getElementById(id);
     if (!el) return;
-    el.addEventListener('touchstart', e => { e.preventDefault(); virtualKeyDown(code); }, { passive: false });
+    el.addEventListener('touchstart', e => { e.preventDefault(); _lastInputTime = Date.now(); virtualKeyDown(code); }, { passive: false });
     el.addEventListener('touchend',   e => { e.preventDefault(); virtualKeyUp(code); },   { passive: false });
     el.addEventListener('touchcancel',e => { e.preventDefault(); virtualKeyUp(code); },   { passive: false });
   }
@@ -169,6 +169,8 @@ let gs: GameState | null = null;
 let currentLevel = 1;
 let lastTime = 0;
 let isCoop = false;
+let _lastInputTime = Date.now();
+const INACTIVITY_MS = 60_000; // 60 s of no input → game over, no XP
 
 // ─── Tutorial state ───────────────────────────────────────────────────────────
 let isTutorial = false;
@@ -260,6 +262,7 @@ function enterFullscreenLandscape(): void {
 }
 
 function showMenu(): void {
+  if (gs) flushSession().catch(console.error); // save any pending XP earned before quitting
   gs = null;
   menu.style.display = 'flex';
   touchControls.classList.remove('game-active');
@@ -455,7 +458,7 @@ function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFa
     // Small delay so the Play-button click unlocks audio before we switch tracks
     setTimeout(() => playPlaylist(GAME_TRACKS), 80);
   }
-  currentLevel = n; screen = 'game'; isPaused = false;
+  currentLevel = n; screen = 'game'; isPaused = false; _lastInputTime = Date.now();
   const pCount = isCoop ? lobbyPlayerCount : 1;
   gs = createGame(n, carryScore, pCount, smokerSlots, carryFailed, thresholdsUnlocked);
   menu.style.display = 'none';
@@ -897,6 +900,13 @@ function loop(now: number): void {
     else if (pauseSubScreen === 'restaurant_menu') drawRestaurantMenu();
     else drawPauseMenu(pauseMenuIdx);
     flushFrame(); requestAnimationFrame(loop); return;
+  }
+  // Inactivity: 60s of no input during active play → game over, no XP rewarded
+  if (gs.phase === 'playing' && !isPaused && Date.now() - _lastInputTime > INACTIVITY_MS) {
+    clearPendingXP();
+    resetXPBreakdown();
+    gs.phase = 'game_over';
+    gs.levelEndTimer = 4000;
   }
   if (!(isTutorial && tutorialModalActive)) tickGame(gs, dt);
   if (isTutorial) tickTutorial(gs, dt);
@@ -1556,6 +1566,7 @@ function toggleFullscreen(): void {
 }
 
 window.addEventListener('keydown', e => {
+  if (!e.repeat) _lastInputTime = Date.now();
   if (e.repeat) return;
   { const s = document.getElementById('splashScreen'); if (s && s.style.display !== 'none') { s.style.display = 'none'; showMenu(); return; } }
   if (e.code === 'KeyF') toggleFullscreen();
