@@ -1520,7 +1520,7 @@ export function drawGameReport(
   runWaste: number, runOverhead: number,
   runCompleted: number, runFailed: number,
   level: number,
-  xp?: { cooking: number; orders: number; delivery: number; actions: number },
+  xp?: { cooking: number; orders: number; delivery: number; actions: number; stage: number },
   xpTotal?: number,
 ): void {
   ctx.fillStyle = 'rgba(0,0,0,0.93)';
@@ -1606,9 +1606,10 @@ export function drawGameReport(
     ctx.fillText('XP EARNED', px + 44, y); y += 18;
     const xpRows: Array<[string, number]> = [
       ['  COOKING',  xp.cooking],
-      ['  ORDERS',   xp.orders],
+      ['  STAGING',  xp.orders],
       ['  DELIVERY', xp.delivery],
       ['  ACTIONS',  xp.actions],
+      ['  STAGES',   xp.stage ?? 0],
     ];
     for (const [label, val] of xpRows) {
       if (val === 0) continue;

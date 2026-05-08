@@ -22,21 +22,23 @@ export function getFloats(): readonly FloatEffect[] { return _effects; }
 // ── Per-game XP breakdown ─────────────────────────────────────────────────────
 
 export interface XPBreakdown {
-  cooking:  number;  // grill / fryer / smoker completions
-  orders:   number;  // plating completed orders
-  delivery: number;  // serving at counter
-  actions:  number;  // chops, cheese melts
+  cooking:  number;  // placing food on grill / fryer / smoker
+  orders:   number;  // staging food on prep table
+  delivery: number;  // serving at counter (includes satisfaction bonus)
+  actions:  number;  // chops
+  stage:    number;  // stage completion bonuses
 }
 
-export const xpBreakdown: XPBreakdown = { cooking: 0, orders: 0, delivery: 0, actions: 0 };
+export const xpBreakdown: XPBreakdown = { cooking: 0, orders: 0, delivery: 0, actions: 0, stage: 0 };
 
 export function resetXPBreakdown(): void {
-  xpBreakdown.cooking = 0;
-  xpBreakdown.orders  = 0;
+  xpBreakdown.cooking  = 0;
+  xpBreakdown.orders   = 0;
   xpBreakdown.delivery = 0;
   xpBreakdown.actions  = 0;
+  xpBreakdown.stage    = 0;
 }
 
 export function xpBreakdownTotal(): number {
-  return xpBreakdown.cooking + xpBreakdown.orders + xpBreakdown.delivery + xpBreakdown.actions;
+  return xpBreakdown.cooking + xpBreakdown.orders + xpBreakdown.delivery + xpBreakdown.actions + xpBreakdown.stage;
 }
