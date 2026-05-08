@@ -1,6 +1,8 @@
 import type { GameState, Station, Order, FoodId, CookSlot, StagedItem } from './types';
 import { FOOD, LEVELS, INTERACT_RANGE, PARTIAL_SPOIL_TIME, STAGED_SPOIL_TIME, OVERHEAD_COST } from './config';
 import { nearestStation } from './kitchen';
+import { getFloats, tickFloats } from './effects';
+import { xpProgress, getProfile } from './profile';
 
 // ─── Order name abbreviations ─────────────────────────────────────────────────
 
@@ -80,6 +82,36 @@ export function render(gs: GameState): void {
   if (gs.prepTimer > 0) drawPrepOverlay(gs);
   if (gs.phase === 'level_end') drawOverlay(gs, true);
   if (gs.phase === 'game_over') drawOverlay(gs, false);
+  drawFloats();
+}
+
+let _lastFloatTick = 0;
+function drawFloats(): void {
+  const now = performance.now();
+  const dt = _lastFloatTick ? Math.min(now - _lastFloatTick, 100) : 16;
+  _lastFloatTick = now;
+  tickFloats(dt);
+  const effects = getFloats();
+  if (!effects.length) return;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const e of effects) {
+    const t = e.age / e.lifetime;
+    const alpha = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4;
+    const yOff  = -t * 48; // rise 48px over lifetime
+    ctx.globalAlpha = alpha;
+    const isLevelUp = e.text === 'LVL UP!';
+    ctx.font = isLevelUp ? 'bold 18px monospace' : 'bold 14px monospace';
+    // outline for readability
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.lineWidth = 3;
+    ctx.strokeText(e.text, e.x, e.y + yOff);
+    ctx.fillStyle = e.color;
+    ctx.fillText(e.text, e.x, e.y + yOff);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 // ─── Kitchen floor ────────────────────────────────────────────────────────────
@@ -853,32 +885,60 @@ function drawHUD(gs: GameState): void {
   ctx.textAlign = 'right';
   let y = 147;
 
-  // ── TODAY'S SALES ─────────────────────────────────────────────────────────
-  ctx.font = '11px monospace';
-  ctx.fillStyle = '#668';
-  ctx.fillText("TODAY'S SALES", hudX, y); y += 26;
+  // ── LVL + XP bar (top of HUD) ────────────────────────────────────────────
+  const prof = getProfile();
+  const xpp  = prof ? xpProgress(prof.xp) : null;
 
-  ctx.font = 'bold 28px monospace';
-  ctx.fillStyle = '#4f8';
-  ctx.fillText(dollar(gs.levelSales), hudX, y); y += 12;
+  ctx.font = 'bold 30px monospace';
+  ctx.fillStyle = '#ffd';
+  ctx.fillText(`LVL ${xpp ? xpp.level : gs.level}`, hudX, y); y += 10;
 
-  ctx.font = '11px monospace';
-  ctx.fillStyle = '#668';
-  ctx.fillText('SEASON TOTAL', hudX, y); y += 22;
+  // XP progress bar
+  const barW = 170, barH = 8;
+  const barX = hudX - barW;
+  const xpFrac = xpp ? Math.min(1, xpp.current / Math.max(1, xpp.needed)) : 0;
+  ctx.fillStyle = '#222';
+  ctx.fillRect(barX, y, barW, barH);
+  ctx.fillStyle = '#4af';
+  ctx.fillRect(barX, y, Math.round(barW * xpFrac), barH);
+  ctx.strokeStyle = '#446'; ctx.lineWidth = 1;
+  ctx.strokeRect(barX, y, barW, barH);
+  y += barH + 4;
 
-  ctx.font = 'bold 22px monospace';
-  ctx.fillStyle = '#ffc';
-  ctx.fillText(dollar(totSales), hudX, y); y += 16;
+  ctx.font = '10px monospace'; ctx.fillStyle = '#6af';
+  if (xpp && xpp.level < 20) {
+    ctx.fillText(`${xpp.current} / ${xpp.needed} XP`, hudX, y);
+  } else if (xpp) {
+    ctx.fillText('MAX LEVEL', hudX, y);
+  }
+  y += 14;
 
   // Divider
   ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(hudX - 175, y); ctx.lineTo(hudX - 8, y); ctx.stroke();
-  y += 18;
+  y += 14;
 
-  // ── LVL / CASH ON HAND / TIMER ───────────────────────────────────────────
-  ctx.font = 'bold 30px monospace';
-  ctx.fillStyle = '#ffd';
-  ctx.fillText(`LVL ${gs.level}`, hudX, y); y += 38;
+  // ── TODAY'S SALES ─────────────────────────────────────────────────────────
+  ctx.font = '11px monospace';
+  ctx.fillStyle = '#668';
+  ctx.fillText("TODAY'S SALES", hudX, y); y += 24;
+
+  ctx.font = 'bold 26px monospace';
+  ctx.fillStyle = '#4f8';
+  ctx.fillText(dollar(gs.levelSales), hudX, y); y += 10;
+
+  ctx.font = '11px monospace';
+  ctx.fillStyle = '#668';
+  ctx.fillText('SEASON TOTAL', hudX, y); y += 20;
+
+  ctx.font = 'bold 20px monospace';
+  ctx.fillStyle = '#ffc';
+  ctx.fillText(dollar(totSales), hudX, y); y += 14;
+
+  // Divider
+  ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(hudX - 175, y); ctx.lineTo(hudX - 8, y); ctx.stroke();
+  y += 16;
 
   const cents = gs.score;
   const moneyStr = cents < 0
@@ -1460,11 +1520,13 @@ export function drawGameReport(
   runWaste: number, runOverhead: number,
   runCompleted: number, runFailed: number,
   level: number,
+  xp?: { cooking: number; orders: number; delivery: number; actions: number },
+  xpTotal?: number,
 ): void {
   ctx.fillStyle = 'rgba(0,0,0,0.93)';
   ctx.fillRect(0, 0, W, H);
 
-  const panelW = 500, panelH = 450;
+  const panelW = 500, panelH = 540;
   const px = (W - panelW) / 2, py = (H - panelH) / 2;
   ctx.fillStyle = '#060402';
   ctx.fillRect(px, py, panelW, panelH);
@@ -1533,6 +1595,32 @@ export function drawGameReport(
     ctx.textAlign = 'right';
     ctx.fillStyle = color;
     ctx.fillText(val, pctX, y); y += 22;
+  }
+
+  // XP breakdown
+  if (xp && xpTotal !== undefined && xpTotal > 0) {
+    y += 6;
+    ctx.strokeStyle = '#432'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px + 20, y); ctx.lineTo(px + panelW - 20, y); ctx.stroke(); y += 16;
+    ctx.textAlign = 'left'; ctx.fillStyle = '#6af'; ctx.font = 'bold 12px monospace';
+    ctx.fillText('XP EARNED', px + 44, y); y += 18;
+    const xpRows: Array<[string, number]> = [
+      ['  COOKING',  xp.cooking],
+      ['  ORDERS',   xp.orders],
+      ['  DELIVERY', xp.delivery],
+      ['  ACTIONS',  xp.actions],
+    ];
+    for (const [label, val] of xpRows) {
+      if (val === 0) continue;
+      ctx.textAlign = 'left'; ctx.fillStyle = '#88b'; ctx.font = '11px monospace';
+      ctx.fillText(label, px + 44, y);
+      ctx.textAlign = 'right'; ctx.fillStyle = '#6af';
+      ctx.fillText(`+${val}`, pctX, y); y += 17;
+    }
+    ctx.textAlign = 'left'; ctx.fillStyle = '#adf'; ctx.font = 'bold 12px monospace';
+    ctx.fillText('  TOTAL', px + 44, y);
+    ctx.textAlign = 'right';
+    ctx.fillText(`+${xpTotal}`, pctX, y); y += 14;
   }
 
   const blink = Math.floor(Date.now() / 500) % 2 === 0;

@@ -1,8 +1,9 @@
 import type { GameState, Order, FoodId, HeldItem, StagedItem, CookSlot } from './types';
 import { LEVELS, ORDERS, FOOD, MEAL_PRICES, INTERACT_RANGE, PLAYER_SPEED, PARTIAL_SPOIL_TIME, STAGED_SPOIL_TIME, LABOR_RATE, OVERTIME_LABOR_RATE, BASE_MAX_FAILS, UPSET_THRESHOLDS, ORDER_DEFS } from './config';
 import { buildStations, tickCooking, nearestStation, distToStation, placeOnStation, pickupFromStation } from './kitchen';
-import { input, keys, wasdDash, arrowDash } from './input';
+import { input, keys, wasdDash, arrowDash, wasdPressTime, arrowPressTime } from './input';
 import { awardXP, incrementStat } from './profile';
+import { spawnFloat, xpBreakdown } from './effects';
 
 // Remote player input — set by net handlers; avoids injecting into the shared keys Set
 export const remoteInput = {
@@ -34,7 +35,7 @@ const MEAL_STAT_MAP: Record<string, string> = {
 };
 
 function onCookingDone(food: FoodId, kind: string): void {
-  awardXP(1);
+  awardXP(1); xpBreakdown.cooking += 1;
   if (food === 'raw_patty')  incrementStat('patties_grilled', 1);
   else if (food === 'raw_hotdog') incrementStat('hotdogs_grilled', 1);
   else if (food === 'raw_fries')  incrementStat('fries_fried', 1);
@@ -423,7 +424,7 @@ function tickStaged(gs: GameState, dt: number): void {
           if (o.items.every(i => i.done)) {
             o.status = 'plating';
             gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
-            awardXP(1); incrementStat('plates_completed', 1);
+            awardXP(1); xpBreakdown.orders += 1; incrementStat('plates_completed', 1);
           }
         }
         continue;
@@ -439,7 +440,7 @@ function tickStaged(gs: GameState, dt: number): void {
         if (o.items.every(i => i.done)) {
           o.status = 'plating';
           gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
-          awardXP(1); incrementStat('plates_completed', 1);
+          awardXP(1); xpBreakdown.orders += 1; incrementStat('plates_completed', 1);
         }
       }
     }
@@ -458,7 +459,7 @@ function tickSmoker(gs: GameState): void {
     if (targetReached) {
       slot.state = 'ready';
       slot.timer = 0;
-      awardXP(1);
+      awardXP(1); xpBreakdown.cooking += 1;
       incrementStat('shoulders_smoked', 1);
     }
   }
@@ -472,7 +473,8 @@ function tickChop(gs: GameState, dt: number): void {
       gs.chopOutput += 4;
       gs.chopProgress = 0;
       gs.chopOutputTimer = 0; gs.chopOutputSpoiled = false;
-      awardXP(1); incrementStat('bbq_chops', 1);
+      awardXP(1); xpBreakdown.actions += 1; incrementStat('bbq_chops', 1);
+      spawnFloat(gs.player.x, gs.player.y - 30, '+1 XP', '#6af');
     }
   }
 }
@@ -550,11 +552,19 @@ function tickPlayer(gs: GameState, dt: number): void {
     dash.remaining = Math.max(0, dash.remaining - spd);
   } else {
     if (!held0) dash.remaining = 0;
-    if (up) dy -= 1; if (dn) dy += 1; if (lt) dx -= 1; if (rt) dx += 1;
+    // Moonwalk: both opposing directions held → move in direction of later-pressed key, keep facing
+    const pt = remoteInput.useRemote ? arrowPressTime : wasdPressTime;
+    const bothLR = lt && rt, bothUD = up && dn;
+    if (bothLR) { dx = pt.right > pt.left ? 1 : -1; }
+    else        { if (lt) dx -= 1; if (rt) dx += 1; }
+    if (bothUD) { dy = pt.down > pt.up ? 1 : -1; }
+    else        { if (up) dy -= 1; if (dn) dy += 1; }
     if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
     spd = PLAYER_SPEED * dt / 1000;
+    // Only update facing when not moonwalking (so the sprite keeps looking the original direction)
+    if ((dx !== 0 || dy !== 0) && !(bothLR || bothUD)) p.facing = Math.atan2(dy, dx);
   }
-  if (dx !== 0 || dy !== 0) { p.facing = Math.atan2(dy, dx); p.walkFrame += dt / 180; }
+  if (dx !== 0 || dy !== 0) { p.walkFrame += dt / 180; }
   else { p.walkFrame = 0; }
   p.x = Math.max(40, Math.min(1060, p.x + dx * spd));
   p.y = Math.max(155, Math.min(690, p.y + dy * spd));
@@ -580,11 +590,17 @@ function tickPlayer2(gs: GameState, dt: number): void {
     dash.remaining = Math.max(0, dash.remaining - spd);
   } else {
     if (!held1) dash.remaining = 0;
-    if (pk.up) dy -= 1; if (pk.down) dy += 1; if (pk.left) dx -= 1; if (pk.right) dx += 1;
+    // Moonwalk for local P2 (arrow keys) — only when not online
+    const bothLR2 = pk.left && pk.right, bothUD2 = pk.up && pk.down;
+    if (!remoteInput.useRemote && bothLR2) { dx = arrowPressTime.right > arrowPressTime.left ? 1 : -1; }
+    else { if (pk.left) dx -= 1; if (pk.right) dx += 1; }
+    if (!remoteInput.useRemote && bothUD2) { dy = arrowPressTime.down > arrowPressTime.up ? 1 : -1; }
+    else { if (pk.up) dy -= 1; if (pk.down) dy += 1; }
     if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
     spd = PLAYER_SPEED * dt / 1000;
+    if ((dx !== 0 || dy !== 0) && !(!remoteInput.useRemote && (bothLR2 || bothUD2))) p.facing = Math.atan2(dy, dx);
   }
-  if (dx !== 0 || dy !== 0) { p.facing = Math.atan2(dy, dx); p.walkFrame += dt / 180; }
+  if (dx !== 0 || dy !== 0) { p.walkFrame += dt / 180; }
   else { p.walkFrame = 0; }
   p.x = Math.max(40, Math.min(1060, p.x + dx * spd));
   p.y = Math.max(155, Math.min(690, p.y + dy * spd));
@@ -731,7 +747,8 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
           readyPatties[i].food = null; readyPatties[i].state = 'empty'; readyPatties[i].timer = 0;
         }
         p.held = { food: 'cheese_patty', count: converts, burned: false };
-        awardXP(converts); incrementStat('cheese_melted', converts);
+        awardXP(converts); xpBreakdown.actions += converts; incrementStat('cheese_melted', converts);
+        spawnFloat(p.x, p.y - 30, `+${converts} XP`, '#6af');
       }
       return;
     }
@@ -860,7 +877,8 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
           if (o.items.every(i => i.done)) {
             o.status = 'plating';
             gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
-            awardXP(1); incrementStat('plates_completed', 1);
+            awardXP(1); xpBreakdown.orders += 1; incrementStat('plates_completed', 1);
+            spawnFloat(p.x, p.y - 30, '+1 XP', '#6af');
           }
           return;
         }
@@ -901,7 +919,8 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
         gs.levelSatisfactionSum += calcOrderSatisfaction(order);
         gs.levelSatisfactionCount++;
         order.status = 'failed'; // remove from ticket board
-        awardXP(1);
+        awardXP(1); xpBreakdown.delivery += 1;
+        spawnFloat(p.x, p.y - 30, '+1 XP', '#6af');
         const [base] = order.name.split('+');
         const mealStat = MEAL_STAT_MAP[base.trim()];
         if (mealStat) incrementStat(mealStat, 1);

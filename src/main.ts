@@ -8,6 +8,7 @@ const GAME_TRACKS = [
   '/audio/game4.mp3',
 ];
 import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp, keys } from './input';
+import { spawnFloat, resetXPBreakdown, xpBreakdown, xpBreakdownTotal } from './effects';
 import { createGame, tickGame, resolveCollisions, remoteInput } from './game';
 import { initRenderer, render, resizeRenderer, loadSprites, drawNameEntry, drawLeaderboard, drawPauseMenu, drawControlsOverlay, drawRestaurantMenu, drawTutorialHint, drawTutorialModal, drawGameReport, updateHUDRunStats } from './renderer';
 import type { GameState, CookSlot } from './types';
@@ -148,6 +149,7 @@ function _nextToast(): void {
 // Fires immediately during gameplay when XP crosses a threshold → in-game toast
 setOnEarlyLevelUp((_, newLv) => {
   showToast('LEVEL UP!', `You are now Level ${newLv >= 20 ? 'MAX' : newLv}`);
+  if (gs?.player) spawnFloat(gs.player.x, gs.player.y - 50, 'LVL UP!', '#4f8', 2000);
 });
 
 // Fires at session end (flushSession) → update UI with the now-official level
@@ -449,6 +451,7 @@ function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFa
     incrementStat(isCoop ? 'coop_sessions' : 'solo_sessions', 1);
     runSales = 0; runCOGS = 0; runLabor = 0; runWaste = 0; runOverhead = 0; runCompleted = 0; runFailed = 0;
     runSatisfactionSum = 0; runSatisfactionCount = 0;
+    resetXPBreakdown();
     // Small delay so the Play-button click unlocks audio before we switch tracks
     setTimeout(() => playPlaylist(GAME_TRACKS), 80);
   }
@@ -850,7 +853,7 @@ function loop(now: number): void {
       flushFrame(); requestAnimationFrame(loop); return;
     }
     if (gs) render(gs);
-    drawGameReport(lastRunSales, runCOGS, runLabor, runWaste, runOverhead, runCompleted, runFailed, lastGameLevel);
+    drawGameReport(lastRunSales, runCOGS, runLabor, runWaste, runOverhead, runCompleted, runFailed, lastGameLevel, xpBreakdown, xpBreakdownTotal());
     flushFrame(); requestAnimationFrame(loop); return;
   }
   // Post-game overlay — arrow key navigation
