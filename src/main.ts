@@ -33,6 +33,7 @@ import {
   startHostSync, stopHostSync, startGuestSync, stopGuestSync, pushGuestInput,
   setPresence, clearPresence, watchPresence,
   seekMatch, notifyMatch, watchForMatch, leaveMatchmaking,
+  joinSizedQueue, leaveSizedQueue, watchSizedQueue,
   type P2InputData, type PresenceUser,
 } from './netplay';
 
@@ -235,6 +236,9 @@ let pendingInviteLobbyId: string | null = null; // lobby I created for invite
 let pendingInviteToUid: string | null = null;   // uid of the player I invited
 let isMatchmaking = false;
 let stopMatchwatch: (() => void) | null = null;
+let coopQueueSize = 2;
+let showSizePicker = false;
+let stopQueueWatch: (() => void) | null = null;
 let receivedInvites: InviteData[] = [];         // invites I received
 let onlineUsers: PresenceUser[] = [];
 
@@ -1014,6 +1018,7 @@ function openLobbyScreen(): void {
   if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
   (window.screen.orientation as any)?.lock?.('landscape').catch(() => {});
   // 1 PLAYER is always available; co-op + social features require sign-in
+  showSizePicker = false; isMatchmaking = false;
   document.getElementById('lobbyToolbar')!.style.display = 'flex';
   const coopBtn = document.getElementById('lobbyPlayCoop') as HTMLButtonElement;
   coopBtn.disabled = !user;
@@ -1037,6 +1042,8 @@ function openLobbyScreen(): void {
 function closeLobbyScreen(): void {
   lobbyScreen.style.display = 'none';
   cancelMatchmakingFn();
+  stopMatchwatch?.(); stopMatchwatch = null;
+  stopQueueWatch?.(); stopQueueWatch = null;
   if (partyLobbyId) leaveParty();
   if (user) clearPresence(user.uid);
   unsubGlobalChat?.(); unsubGlobalChat = null;
@@ -1063,15 +1070,15 @@ function renderOnlineUsers(): void {
     el.innerHTML = '<div class="online-empty">no one else online</div>';
   } else {
     el.innerHTML = others.map(u => {
-      const isInvited = pendingInviteToUid === u.uid;
-      const canInvite = !pendingInviteId;
+      const isTarget  = pendingInviteToUid === u.uid;
+      const canAct    = !pendingInviteId && !isMatchmaking;
       return `<div class="online-row">
         ${u.photo ? `<img class="online-photo" src="${u.photo}" />` : '<div class="online-photo-ph"></div>'}
         <span class="online-name">${escHtml(u.name)}</span>
-        ${isInvited
+        ${isTarget
           ? `<button class="cancel-invite-btn">CANCEL</button>`
-          : canInvite
-            ? `<button class="invite-btn" data-uid="${u.uid}" data-name="${escHtml(u.name)}">INVITE</button>`
+          : canAct
+            ? `<button class="invite-btn" data-uid="${u.uid}" data-name="${escHtml(u.name)}">INVITE</button><button class="join-btn" data-uid="${u.uid}" data-name="${escHtml(u.name)}">JOIN</button>`
             : ''}
       </div>`;
     }).join('');
@@ -1080,6 +1087,13 @@ function renderOnlineUsers(): void {
         const uid  = (btn as HTMLElement).dataset.uid!;
         const name = (btn as HTMLElement).dataset.name!;
         handleSendInvite(uid, name);
+      });
+    });
+    el.querySelectorAll('.join-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const uid  = (btn as HTMLElement).dataset.uid!;
+        const name = (btn as HTMLElement).dataset.name!;
+        handleSendJoinRequest(uid, name);
       });
     });
     el.querySelector('.cancel-invite-btn')?.addEventListener('click', handleCancelInvite);
@@ -1124,11 +1138,41 @@ async function handleGlobalSend(): Promise<void> {
 
 // Invites
 async function handleCancelInvite(): Promise<void> {
+  stopMatchwatch?.(); stopMatchwatch = null; // also cleans up join-request watchForMatch
   unsubSentInvite?.(); unsubSentInvite = null;
   if (pendingInviteId) { deleteInvite(pendingInviteId).catch(() => {}); pendingInviteId = null; }
   if (pendingInviteLobbyId) { deleteLobby(pendingInviteLobbyId).catch(() => {}); pendingInviteLobbyId = null; }
   pendingInviteToUid = null;
   renderOnlineUsers();
+}
+
+async function handleSendJoinRequest(toUid: string, toName: string): Promise<void> {
+  if (!user || pendingInviteId || isMatchmaking) return;
+  const u = user;
+  // Watch for the host to send us a lobby after accepting
+  stopMatchwatch = watchForMatch(u.uid, async (lobbyId, playerCount) => {
+    stopMatchwatch = null;
+    pendingInviteId = null; pendingInviteToUid = null;
+    unsubSentInvite?.(); unsubSentInvite = null;
+    renderOnlineUsers();
+    const slot = await joinLobby(lobbyId, u.uid, u.displayName ?? 'Player', u.photoURL ?? '');
+    if (slot) startOnlineGame(lobbyId, false, slot, playerCount);
+    else showMenu();
+  });
+  // Send join request — lobbyId empty because host creates it on accept
+  const inviteId = await sendInvite(u.uid, u.displayName ?? 'Player', u.photoURL ?? '', toUid, '', 'join_request');
+  pendingInviteId = inviteId;
+  pendingInviteToUid = toUid;
+  renderOnlineUsers();
+  unsubSentInvite?.();
+  unsubSentInvite = watchSentInvite(inviteId, invite => {
+    if (!invite || invite.status === 'declined') {
+      stopMatchwatch?.(); stopMatchwatch = null;
+      pendingInviteId = null; pendingInviteToUid = null;
+      unsubSentInvite?.(); unsubSentInvite = null;
+      renderOnlineUsers();
+    }
+  });
 }
 
 async function handleSendInvite(toUid: string, toName: string): Promise<void> {
@@ -1306,6 +1350,14 @@ function showInviteBanner(invite: InviteData | null): void {
 async function handleAcceptInvite(invite: InviteData): Promise<void> {
   if (!user) return;
   showInviteBanner(null);
+  if (invite.type === 'join_request') {
+    // They want to join us — we become the host
+    const lobbyId = await createLobby(user.uid, user.displayName ?? 'Player', user.photoURL ?? '', 2);
+    await respondToInvite(invite.id, 'accepted');
+    await notifyMatch(invite.fromUid, lobbyId, 2);
+    startOnlineGame(lobbyId, true, 1, 2);
+    return;
+  }
   const slot = await joinLobby(invite.lobbyId, user.uid, user.displayName ?? 'Player', user.photoURL ?? '');
   if (!slot) return;
   await respondToInvite(invite.id, 'accepted');
@@ -1321,45 +1373,64 @@ async function handleDeclineInvite(invite: InviteData): Promise<void> {
 // ─── Matchmaking ─────────────────────────────────────────────────────────────
 
 function renderMatchmakingUI(): void {
-  document.getElementById('lobbyActions')!.style.display      = isMatchmaking ? 'none' : 'flex';
-  document.getElementById('matchmakingStatus')!.style.display = isMatchmaking ? 'flex' : 'none';
+  const busy = isMatchmaking || showSizePicker;
+  document.getElementById('lobbyActions')!.style.display      = busy ? 'none' : 'flex';
+  document.getElementById('coopSizePicker')!.style.display    = showSizePicker ? 'flex' : 'none';
+  document.getElementById('matchmakingStatus')!.style.display = isMatchmaking  ? 'flex' : 'none';
+  document.getElementById('mmSize')!.textContent = String(coopQueueSize);
 }
 
-async function startMatchmakingFn(): Promise<void> {
+async function startSizedMatchmaking(size: number): Promise<void> {
   if (!user || isMatchmaking) return;
   const u = user;
+  coopQueueSize = size;
   isMatchmaking = true;
+  showSizePicker = false;
   renderMatchmakingUI();
+  document.getElementById('mmCount')!.textContent = `(1/${size})`;
+
+  // Watch queue count for live "X/N" display
+  stopQueueWatch = watchSizedQueue(size, count => {
+    document.getElementById('mmCount')!.textContent = count > 0 ? `(${count}/${size})` : '';
+  });
+
   try {
-    const claimed = await seekMatch(u.uid, u.displayName ?? 'Player', u.photoURL ?? '');
-    if (!isMatchmaking) return; // cancelled during async await
-    if (claimed) {
-      // We claimed a waiting player — we're the host
-      const lobbyId = await createLobby(u.uid, u.displayName ?? 'Player', u.photoURL ?? '', 2);
-      await notifyMatch(claimed.uid, lobbyId);
+    const players = await joinSizedQueue(u.uid, u.displayName ?? 'Player', u.photoURL ?? '', size);
+    if (!isMatchmaking) return; // cancelled
+
+    if (players) {
+      // We filled the queue — we're the host
+      stopQueueWatch?.(); stopQueueWatch = null;
+      const lobbyId = await createLobby(u.uid, u.displayName ?? 'Player', u.photoURL ?? '', size);
+      const others = players.filter(p => p.uid !== u.uid);
+      await Promise.all(others.map((p, i) => notifyMatch(p.uid, lobbyId, size)));
       isMatchmaking = false;
-      startOnlineGame(lobbyId, true, 1, 2);
+      startOnlineGame(lobbyId, true, 1, size);
     } else {
-      // We're now waiting in the queue — watch for host to notify us
-      stopMatchwatch = watchForMatch(u.uid, async lobbyId => {
+      // Waiting — watch for host notification
+      stopMatchwatch = watchForMatch(u.uid, async (lobbyId, playerCount) => {
+        stopQueueWatch?.(); stopQueueWatch = null;
         isMatchmaking = false;
         stopMatchwatch = null;
         const slot = await joinLobby(lobbyId, u.uid, u.displayName ?? 'Player', u.photoURL ?? '');
-        if (slot) startOnlineGame(lobbyId, false, slot, 2);
+        if (slot) startOnlineGame(lobbyId, false, slot, playerCount);
         else showMenu();
       });
     }
   } catch {
     isMatchmaking = false;
+    stopQueueWatch?.(); stopQueueWatch = null;
     renderMatchmakingUI();
   }
 }
 
 function cancelMatchmakingFn(): void {
-  if (!isMatchmaking) return;
+  if (!isMatchmaking && !showSizePicker) return;
   isMatchmaking = false;
+  showSizePicker = false;
   stopMatchwatch?.(); stopMatchwatch = null;
-  if (user) leaveMatchmaking(user.uid);
+  stopQueueWatch?.(); stopQueueWatch = null;
+  if (user) leaveSizedQueue(user.uid, coopQueueSize);
   renderMatchmakingUI();
 }
 
@@ -1386,8 +1457,34 @@ document.getElementById('lobbyPlaySolo')!.addEventListener('click', () => {
   closeLobbyScreen(); isCoop = false; lobbyPlayerCount = 1; isProMode = true; startLevel(1, STARTING_MONEY);
   if (gs) render(gs); flushFrame();
 });
-document.getElementById('lobbyPlayCoop')!.addEventListener('click', startMatchmakingFn);
+document.getElementById('lobbyPlayCoop')!.addEventListener('click', () => {
+  if (!user) return;
+  showSizePicker = true;
+  renderMatchmakingUI();
+  document.getElementById('coopSize2')!.focus();
+});
+document.getElementById('coopSize2')!.addEventListener('click', () => startSizedMatchmaking(2));
+document.getElementById('coopSize3')!.addEventListener('click', () => startSizedMatchmaking(3));
+document.getElementById('coopSize4')!.addEventListener('click', () => startSizedMatchmaking(4));
+document.getElementById('coopSizeCancel')!.addEventListener('click', cancelMatchmakingFn);
 document.getElementById('cancelMatchmakingBtn')!.addEventListener('click', cancelMatchmakingFn);
+
+// ─── Lobby keyboard navigation ────────────────────────────────────────────────
+
+document.getElementById('lobbyScreen')!.addEventListener('keydown', e => {
+  if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) return;
+  const active = document.activeElement;
+  if (active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA') return;
+  e.preventDefault();
+  const focusable = Array.from(
+    document.getElementById('lobbyScreen')!.querySelectorAll<HTMLButtonElement>('button:not([disabled])')
+  ).filter(b => b.offsetParent !== null); // only visible buttons
+  const idx = focusable.indexOf(active as HTMLButtonElement);
+  const next = (e.key === 'ArrowRight' || e.key === 'ArrowDown')
+    ? (idx < focusable.length - 1 ? idx + 1 : 0)
+    : (idx > 0 ? idx - 1 : focusable.length - 1);
+  focusable[next]?.focus();
+});
 
 // ─── Post-game overlay buttons ────────────────────────────────────────────────
 

@@ -62,21 +62,63 @@ export async function seekMatch(
 }
 
 // Host calls this to tell the guest which lobby to join.
-export function notifyMatch(toUid: string, lobbyId: string): Promise<void> {
+export function notifyMatch(toUid: string, lobbyId: string, playerCount = 2): Promise<void> {
   const r = ref(rtdb, `matchmaking/match/${toUid}`);
   onDisconnect(r).remove();
-  return set(r, { lobbyId });
+  return set(r, { lobbyId, playerCount });
 }
 
 // Guest calls this to watch for the host's lobby notification.
 // Returns a cancel function.
-export function watchForMatch(uid: string, cb: (lobbyId: string) => void): () => void {
+export function watchForMatch(uid: string, cb: (lobbyId: string, playerCount: number) => void): () => void {
   const r = ref(rtdb, `matchmaking/match/${uid}`);
   onValue(r, snap => {
-    const val = snap.val() as { lobbyId: string } | null;
-    if (val?.lobbyId) { off(r); remove(r).catch(() => {}); cb(val.lobbyId); }
+    const val = snap.val() as { lobbyId: string; playerCount?: number } | null;
+    if (val?.lobbyId) { off(r); remove(r).catch(() => {}); cb(val.lobbyId, val.playerCount ?? 2); }
   });
   return () => { off(r); remove(r).catch(() => {}); };
+}
+
+// ── Sized-queue matchmaking (2P / 3P / 4P) ───────────────────────────────────
+
+export async function joinSizedQueue(
+  uid: string, name: string, photo: string, size: number,
+): Promise<Array<{uid: string; name: string; photo: string}> | null> {
+  const qRef = ref(rtdb, `matchmaking/sized_${size}`);
+  let filled: Array<{uid: string; name: string; photo: string}> | null = null;
+  await runTransaction(qRef, current => {
+    const cur: Record<string, {uid: string; name: string; photo: string}> = current ?? {};
+    if (cur[uid]) return cur; // already in queue
+    const entries = { ...cur, [uid]: { uid, name, photo } };
+    if (Object.keys(entries).length >= size) {
+      filled = Object.values(entries).slice(0, size) as Array<{uid: string; name: string; photo: string}>;
+      return null; // clear the queue — we're the host
+    }
+    return entries;
+  });
+  if (!filled) {
+    onDisconnect(ref(rtdb, `matchmaking/sized_${size}/${uid}`)).remove();
+  }
+  return filled;
+}
+
+export function leaveSizedQueue(uid: string, size: number): void {
+  runTransaction(ref(rtdb, `matchmaking/sized_${size}`), cur => {
+    if (!cur || !cur[uid]) return cur;
+    const next = { ...cur };
+    delete next[uid];
+    return Object.keys(next).length ? next : null;
+  }).catch(() => {});
+  remove(ref(rtdb, `matchmaking/match/${uid}`)).catch(() => {});
+}
+
+export function watchSizedQueue(size: number, cb: (count: number) => void): () => void {
+  const qRef = ref(rtdb, `matchmaking/sized_${size}`);
+  onValue(qRef, snap => {
+    const val = snap.val() as Record<string, unknown> | null;
+    cb(val ? Object.keys(val).length : 0);
+  });
+  return () => off(qRef);
 }
 
 // Remove self from matchmaking (cancel or cleanup).

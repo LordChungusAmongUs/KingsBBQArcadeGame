@@ -229,6 +229,18 @@
     #lobbyPlaySolo:hover  { background: #f842; }
     #lobbyPlayCoop  { border-color: #4af; color: #4af; }
     #lobbyPlayCoop:hover  { background: #4af3; }
+    /* Co-op size picker */
+    #coopSizePicker { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0; flex-wrap: wrap; }
+    .size-label { color: #887; font-size: 0.78rem; letter-spacing: 0.1em; }
+    .size-btn { background: none; border: 2px solid #4af; color: #4af; border-radius: 4px; padding: 0.35rem 0.9rem; font-family: inherit; font-size: 0.9rem; cursor: pointer; letter-spacing: 0.1em; }
+    .size-btn:hover, .size-btn:focus { background: #4af3; outline: 2px solid #4af; }
+    .size-cancel { background: none; border: 1px solid #554; color: #776; border-radius: 4px; padding: 0.3rem 0.6rem; font-family: inherit; font-size: 0.8rem; cursor: pointer; }
+    .size-cancel:hover, .size-cancel:focus { background: #221; color: #f84; border-color: #f84; outline: none; }
+    /* JOIN button in online list */
+    .join-btn { background: none; border: 1px solid #6a4; color: #6a4; border-radius: 3px; padding: 1px 6px; font-family: inherit; font-size: 0.7rem; cursor: pointer; margin-left: 3px; }
+    .join-btn:hover { background: #6a42; }
+    /* Lobby keyboard focus outline */
+    #lobbyScreen button:focus { outline: 2px solid #f84; outline-offset: 2px; }
     #matchmakingStatus {
       display: none; align-items: center; gap: 1rem;
     }
@@ -502,19 +514,19 @@
       <div id="lobbyToolbar">
         <div id="lobbyActions">
           <button id="lobbyPlaySolo">▶ 1 PLAYER</button>
-          <button id="lobbyPlayCoop">🤝 QUICK MATCH (2P)</button>
-          <button id="lobbyCreateParty">🎮 CREATE PARTY (2–4P)</button>
-          <button id="lobbyJoinParty">🔑 JOIN PARTY</button>
+          <button id="lobbyPlayCoop">🤝 CO-OP</button>
           <button id="lobbyAchievements">🏆 ACHIEVEMENTS</button>
           <button id="lobbyShop" disabled>🛒 SHOP</button>
         </div>
-        <div id="joinPartyRow" style="display:none">
-          <input id="joinPartyCode" placeholder="Enter party code..." maxlength="24" style="background:#1a0c04;border:1px solid #f84;color:#f84;padding:0.35rem 0.6rem;font-family:inherit;font-size:0.85rem;border-radius:4px;width:160px"/>
-          <button id="joinPartyBtn">JOIN</button>
-          <button id="joinPartyCancel">✕</button>
+        <div id="coopSizePicker" style="display:none">
+          <span class="size-label">GAME SIZE:</span>
+          <button class="size-btn" id="coopSize2">2P</button>
+          <button class="size-btn" id="coopSize3">3P</button>
+          <button class="size-btn" id="coopSize4">4P</button>
+          <button id="coopSizeCancel" class="size-cancel">✕</button>
         </div>
         <div id="matchmakingStatus">
-          <span id="matchmakingText">SEARCHING FOR OPPONENT<span id="matchmakingDots">...</span></span>
+          <span id="matchmakingText">SEARCHING FOR <span id="mmSize">2</span>P GAME<span id="matchmakingDots">...</span> <span id="mmCount" style="color:#6df;font-size:0.78rem"></span></span>
           <button id="cancelMatchmakingBtn">CANCEL</button>
         </div>
       </div>

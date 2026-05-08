@@ -113,14 +113,16 @@ export interface InviteData {
   toUid: string;
   lobbyId: string;
   status: 'pending' | 'accepted' | 'declined';
+  type?: 'invite' | 'join_request';
 }
 
 export async function sendInvite(
   fromUid: string, fromName: string, fromPhoto: string,
   toUid: string, lobbyId: string,
+  type: 'invite' | 'join_request' = 'invite',
 ): Promise<string> {
   const ref = await addDoc(collection(db, 'invites'), {
-    fromUid, fromName, fromPhoto, toUid, lobbyId,
+    fromUid, fromName, fromPhoto, toUid, lobbyId, type,
     status: 'pending', createdAt: serverTimestamp(),
   });
   return ref.id;

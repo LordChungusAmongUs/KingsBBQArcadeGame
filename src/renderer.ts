@@ -829,63 +829,11 @@ function drawHUD(gs: GameState): void {
   // Anchor HUD to right wall area (fixed, not window-relative)
   const hudX = Math.min(W - 15, 1168);
 
-  // Semi-transparent backing panel
-  ctx.fillStyle = 'rgba(0,0,0,0.40)';
-  ctx.fillRect(hudX - 183, 125, 188, 450);
-
-  ctx.textAlign = 'right';
-  let y = 178;
-  const lineH = 60;
-
-  // Level number
-  ctx.font = 'bold 42px monospace';
-  ctx.fillStyle = '#ffd';
-  ctx.fillText(`LVL ${gs.level}`, hudX, y);
-  y += lineH;
-
-  // Money
-  const cents = gs.score;
-  const moneyStr = cents < 0
-    ? `-$${(Math.abs(cents) / 100).toFixed(2)}`
-    : `$${(cents / 100).toFixed(2)}`;
-  ctx.fillStyle = cents < 0 ? '#f88' : '#4f4';
-  ctx.fillText(moneyStr, hudX, y);
-  y += lineH;
-
-  // Timer
-  ctx.fillStyle = gs.levelTimer <= 0 ? '#f84' : '#ffd';
-  ctx.fillText(`${mm}:${ss}`, hudX, y);
-  y += lineH;
-
-  // Stars
-  const filled = Math.min(gs.failed, gs.maxFails);
-  const displayMax = Math.min(gs.maxFails, 6);
-  const displayFilled = Math.min(gs.failed, displayMax);
-  const starStr = '★'.repeat(displayFilled) + '☆'.repeat(displayMax - displayFilled);
-  const extraBadge = gs.maxFails > 6 ? '+' : '';
-  ctx.fillStyle = gs.failed >= gs.maxFails - 1 ? '#f44' : gs.failed > 0 ? '#f84' : '#888';
-  ctx.fillText(starStr + extraBadge, hudX, y);
-  y += 36;
-
-  ctx.font = 'bold 20px monospace';
-  ctx.fillStyle = '#888';
-  ctx.fillText(`${gs.failed} / ${gs.maxFails}`, hudX, y);
-  y += 28;
-
-  ctx.font = '13px monospace';
-  ctx.fillStyle = '#8f8';
-  ctx.fillText(`✓ ${gs.completed} served`, hudX, y);
-  y += 20;
-
-  // ── Financial breakdown ───────────────────────────────────────────────────
-  ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(hudX - 175, y); ctx.lineTo(hudX - 8, y); ctx.stroke();
-  y += 12;
-
-  const totSales    = _hudRun.sales  + gs.levelSales;
-  const totCOGS     = _hudRun.cogs   + gs.levelCOGS;
-  const totLabor    = _hudRun.labor  + gs.levelLabor;
-  const totWaste    = _hudRun.waste  + gs.levelWaste;
+  // Compute financials early so we can display sales at the top
+  const totSales    = _hudRun.sales    + gs.levelSales;
+  const totCOGS     = _hudRun.cogs     + gs.levelCOGS;
+  const totLabor    = _hudRun.labor    + gs.levelLabor;
+  const totWaste    = _hudRun.waste    + gs.levelWaste;
   const totOverhead = _hudRun.overhead + OVERHEAD_COST;
   const totProfit   = totSales - totCOGS - totLabor - totWaste - totOverhead;
   const totSatSum   = _hudRun.satSum   + gs.levelSatisfactionSum;
@@ -897,6 +845,72 @@ function drawHUD(gs: GameState): void {
     const abs = Math.abs(n); const sign = n < 0 ? '-' : '';
     return `${sign}$${(abs / 100).toFixed(2)}`;
   };
+
+  // Semi-transparent backing panel
+  ctx.fillStyle = 'rgba(0,0,0,0.40)';
+  ctx.fillRect(hudX - 183, 125, 188, 460);
+
+  ctx.textAlign = 'right';
+  let y = 147;
+
+  // ── TODAY'S SALES ─────────────────────────────────────────────────────────
+  ctx.font = '11px monospace';
+  ctx.fillStyle = '#668';
+  ctx.fillText("TODAY'S SALES", hudX, y); y += 26;
+
+  ctx.font = 'bold 28px monospace';
+  ctx.fillStyle = '#4f8';
+  ctx.fillText(dollar(gs.levelSales), hudX, y); y += 12;
+
+  ctx.font = '11px monospace';
+  ctx.fillStyle = '#668';
+  ctx.fillText('SEASON TOTAL', hudX, y); y += 22;
+
+  ctx.font = 'bold 22px monospace';
+  ctx.fillStyle = '#ffc';
+  ctx.fillText(dollar(totSales), hudX, y); y += 16;
+
+  // Divider
+  ctx.strokeStyle = '#444'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(hudX - 175, y); ctx.lineTo(hudX - 8, y); ctx.stroke();
+  y += 18;
+
+  // ── LVL / CASH ON HAND / TIMER ───────────────────────────────────────────
+  ctx.font = 'bold 30px monospace';
+  ctx.fillStyle = '#ffd';
+  ctx.fillText(`LVL ${gs.level}`, hudX, y); y += 38;
+
+  const cents = gs.score;
+  const moneyStr = cents < 0
+    ? `-$${(Math.abs(cents) / 100).toFixed(2)}`
+    : `$${(cents / 100).toFixed(2)}`;
+  ctx.fillStyle = cents < 0 ? '#f88' : '#4f4';
+  ctx.fillText(moneyStr, hudX, y); y += 38;
+
+  ctx.fillStyle = gs.levelTimer <= 0 ? '#f84' : '#ffd';
+  ctx.fillText(`${mm}:${ss}`, hudX, y); y += 36;
+
+  // Stars / fails
+  const displayMax    = Math.min(gs.maxFails, 6);
+  const displayFilled = Math.min(gs.failed, displayMax);
+  const starStr   = '★'.repeat(displayFilled) + '☆'.repeat(displayMax - displayFilled);
+  const extraBadge = gs.maxFails > 6 ? '+' : '';
+  ctx.font = 'bold 20px monospace';
+  ctx.fillStyle = gs.failed >= gs.maxFails - 1 ? '#f44' : gs.failed > 0 ? '#f84' : '#888';
+  ctx.fillText(starStr + extraBadge, hudX, y); y += 22;
+
+  ctx.font = 'bold 16px monospace';
+  ctx.fillStyle = '#888';
+  ctx.fillText(`${gs.failed} / ${gs.maxFails}`, hudX, y); y += 20;
+
+  ctx.font = '12px monospace';
+  ctx.fillStyle = '#8f8';
+  ctx.fillText(`✓ ${gs.completed} served`, hudX, y); y += 16;
+
+  // ── Financial breakdown ───────────────────────────────────────────────────
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(hudX - 175, y); ctx.lineTo(hudX - 8, y); ctx.stroke();
+  y += 12;
 
   const rows: [string, string, string][] = [
     ['SALES',   dollar(totSales),                          '#ffd'],

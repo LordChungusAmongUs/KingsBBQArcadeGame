@@ -3,7 +3,7 @@ export const keys: Set<string> = new Set();
 // Dash detection — event-level (reliable; not frame-by-frame)
 const _wasdRel  = { up: 0, down: 0, left: 0, right: 0 };
 const _arrowRel = { up: 0, down: 0, left: 0, right: 0 };
-const DASH_WIN  = 300; // ms window to re-press after release
+const DASH_WIN  = 100; // ms window to re-press after release
 
 export const wasdDash  = { dx: 0, dy: 0, active: false };
 export const arrowDash = { dx: 0, dy: 0, active: false };
