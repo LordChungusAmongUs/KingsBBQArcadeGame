@@ -1037,6 +1037,8 @@ function openLobbyScreen(): void {
   unsubPresence   = watchPresence(users => { onlineUsers = users; renderOnlineUsers(); });
   unsubGlobalChat = watchGlobalChat(renderGlobalChat);
   unsubInvites    = watchIncomingInvites(user.uid, handleIncomingInvites);
+  // Auto-focus first button so arrow keys work immediately without clicking first
+  requestAnimationFrame(() => focusFirstLobbyBtn());
 }
 
 function closeLobbyScreen(): void {
@@ -1378,6 +1380,7 @@ function renderMatchmakingUI(): void {
   document.getElementById('coopSizePicker')!.style.display    = showSizePicker ? 'flex' : 'none';
   document.getElementById('matchmakingStatus')!.style.display = isMatchmaking  ? 'flex' : 'none';
   document.getElementById('mmSize')!.textContent = String(coopQueueSize);
+  requestAnimationFrame(() => focusFirstLobbyBtn());
 }
 
 async function startSizedMatchmaking(size: number): Promise<void> {
@@ -1471,14 +1474,34 @@ document.getElementById('cancelMatchmakingBtn')!.addEventListener('click', cance
 
 // ─── Lobby keyboard navigation ────────────────────────────────────────────────
 
-document.getElementById('lobbyScreen')!.addEventListener('keydown', e => {
-  if (!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) return;
+function focusFirstLobbyBtn(): void {
+  const btn = Array.from(
+    lobbyScreen.querySelectorAll<HTMLButtonElement>('button:not([disabled])')
+  ).find(b => b.offsetParent !== null);
+  btn?.focus();
+}
+
+window.addEventListener('keydown', e => {
+  if (lobbyScreen.style.display === 'none') return;
+  const nav = ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key);
+  const act = e.key === ' ' || e.key === 'Enter';
+  if (!nav && !act) return;
   const active = document.activeElement;
   if (active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA') return;
-  e.preventDefault();
   const focusable = Array.from(
-    document.getElementById('lobbyScreen')!.querySelectorAll<HTMLButtonElement>('button:not([disabled])')
-  ).filter(b => b.offsetParent !== null); // only visible buttons
+    lobbyScreen.querySelectorAll<HTMLButtonElement>('button:not([disabled])')
+  ).filter(b => b.offsetParent !== null);
+  if (!focusable.length) return;
+  if (act) {
+    // If no lobby button is focused yet, focus the first one and let the next press click it
+    if (!focusable.includes(active as HTMLButtonElement)) {
+      e.preventDefault();
+      focusable[0].focus();
+    }
+    // else: browser natively clicks the focused button on Space/Enter — let it propagate
+    return;
+  }
+  e.preventDefault();
   const idx = focusable.indexOf(active as HTMLButtonElement);
   const next = (e.key === 'ArrowRight' || e.key === 'ArrowDown')
     ? (idx < focusable.length - 1 ? idx + 1 : 0)
