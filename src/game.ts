@@ -749,6 +749,8 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
         }
         p.held = { food: 'cheese_patty', count: converts, burned: false };
         incrementStat('cheese_melted', converts);
+        awardXP(1); xpBreakdown.actions += 1;
+        spawnFloat(p.x, p.y - 30, '+1 XP', '#6af');
       }
       return;
     }
