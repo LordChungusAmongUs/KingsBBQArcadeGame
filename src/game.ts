@@ -427,6 +427,7 @@ function tickStaged(gs: GameState, dt: number): void {
             o.status = 'plating';
             gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
             incrementStat('plates_completed', 1);
+            awardXP(1); xpBreakdown.orders += 1;
           }
         }
         continue;
@@ -443,6 +444,7 @@ function tickStaged(gs: GameState, dt: number): void {
           o.status = 'plating';
           gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
           incrementStat('plates_completed', 1);
+          awardXP(1); xpBreakdown.orders += 1;
         }
       }
     }
@@ -553,17 +555,19 @@ function tickPlayer(gs: GameState, dt: number): void {
     dash.remaining = Math.max(0, dash.remaining - spd);
   } else {
     if (!held0) dash.remaining = 0;
-    // Moonwalk: both opposing directions held → move in direction of later-pressed key, keep facing
+    // Moonwalk: both opposing directions held → move in direction of EARLIER-pressed key, face opposite
     const pt = remoteInput.useRemote ? arrowPressTime : wasdPressTime;
     const bothLR = lt && rt, bothUD = up && dn;
-    if (bothLR) { dx = pt.right > pt.left ? 1 : -1; }
+    if (bothLR) { dx = pt.right < pt.left ? 1 : -1; }
     else        { if (lt) dx -= 1; if (rt) dx += 1; }
-    if (bothUD) { dy = pt.down > pt.up ? 1 : -1; }
+    if (bothUD) { dy = pt.down < pt.up ? 1 : -1; }
     else        { if (up) dy -= 1; if (dn) dy += 1; }
     if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
     spd = PLAYER_SPEED * dt / 1000;
-    // Only update facing when not moonwalking (so the sprite keeps looking the original direction)
-    if ((dx !== 0 || dy !== 0) && !(bothLR || bothUD)) p.facing = Math.atan2(dy, dx);
+    if (dx !== 0 || dy !== 0) {
+      if (bothLR || bothUD) p.facing = Math.atan2(-dy, -dx);
+      else p.facing = Math.atan2(dy, dx);
+    }
   }
   if (dx !== 0 || dy !== 0) { p.walkFrame += dt / 180; }
   else { p.walkFrame = 0; }
@@ -593,13 +597,17 @@ function tickPlayer2(gs: GameState, dt: number): void {
     if (!held1) dash.remaining = 0;
     // Moonwalk for local P2 (arrow keys) — only when not online
     const bothLR2 = pk.left && pk.right, bothUD2 = pk.up && pk.down;
-    if (!remoteInput.useRemote && bothLR2) { dx = arrowPressTime.right > arrowPressTime.left ? 1 : -1; }
+    if (!remoteInput.useRemote && bothLR2) { dx = arrowPressTime.right < arrowPressTime.left ? 1 : -1; }
     else { if (pk.left) dx -= 1; if (pk.right) dx += 1; }
-    if (!remoteInput.useRemote && bothUD2) { dy = arrowPressTime.down > arrowPressTime.up ? 1 : -1; }
+    if (!remoteInput.useRemote && bothUD2) { dy = arrowPressTime.down < arrowPressTime.up ? 1 : -1; }
     else { if (pk.up) dy -= 1; if (pk.down) dy += 1; }
     if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
     spd = PLAYER_SPEED * dt / 1000;
-    if ((dx !== 0 || dy !== 0) && !(!remoteInput.useRemote && (bothLR2 || bothUD2))) p.facing = Math.atan2(dy, dx);
+    const moonwalking2 = !remoteInput.useRemote && (bothLR2 || bothUD2);
+    if (dx !== 0 || dy !== 0) {
+      if (moonwalking2) p.facing = Math.atan2(-dy, -dx);
+      else p.facing = Math.atan2(dy, dx);
+    }
   }
   if (dx !== 0 || dy !== 0) { p.walkFrame += dt / 180; }
   else { p.walkFrame = 0; }
@@ -888,10 +896,14 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
           if (food === 'fries' || food === 'rings') {
             gs.staged.push({ food, spoilTimer: 0, spoiled: false, count: 1 });
           }
+          awardXP(1); xpBreakdown.orders += 1;
+          spawnFloat(p.x, p.y - 30, '+1 XP', '#6af');
           if (o.items.every(i => i.done)) {
             o.status = 'plating';
             gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
             incrementStat('plates_completed', 1);
+            awardXP(1); xpBreakdown.orders += 1;
+            spawnFloat(p.x, p.y - 50, '+1 XP (plate!)', '#adf');
           }
           return;
         }
