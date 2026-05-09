@@ -914,7 +914,7 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
         }
         if (s.kind === 'fryer') {
           incrementStat('fryer_uses', 1);
-          const fryXP = p.held?.food === 'raw_rings' ? 1000 : 1;
+          const fryXP = p.held?.food === 'raw_rings' ? 10000 : 1;
           { const xp = awardXP(fryXP); xpBreakdown.cooking += xp;
             spawnFloat(p.x, p.y - 30, `+${xp} XP${fryXP === 1000 ? ' 🐶' : ''}`, '#6af'); }
         }

@@ -744,12 +744,16 @@ function drawFamiliar(gs: GameState): void {
   ctx.fillStyle = '#222';
   ctx.beginPath(); ctx.arc(x + ex - Math.sin(ef) * 3 + Math.cos(ef) * 0.5, y + bob + ey + Math.cos(ef) * 3 + Math.sin(ef) * 0.5, 1.5, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(x + ex + Math.sin(ef) * 3 + Math.cos(ef) * 0.5, y + bob + ey - Math.cos(ef) * 3 + Math.sin(ef) * 0.5, 1.5, 0, Math.PI * 2); ctx.fill();
-  // Familiar-carried item badge
-  if (gs.player.familiarHeld) {
-    const fhDef = FOOD.get(gs.player.familiarHeld.food);
+  // Show 3rd item on familiar when carry ability lets player hold 3
+  const carryOn = (hasUnlock('familiar') && getProfile()?.familiarAbility === 'carry') || gs.meterActive;
+  const showCarryItem = carryOn && gs.player.held && gs.player.held.count >= 3 && !gs.player.held.burned;
+  if (showCarryItem) {
+    const fhDef = FOOD.get(gs.player.held!.food);
     ctx.fillStyle = fhDef?.color ?? '#aaa';
-    ctx.beginPath(); ctx.arc(x + 14, y + bob - 8, 7, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.beginPath(); ctx.arc(x + 14, y + bob - 8, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = '#222'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('1', x + 14, y + bob - 5);
   }
   ctx.restore();
 }
