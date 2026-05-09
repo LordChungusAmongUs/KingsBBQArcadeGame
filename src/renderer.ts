@@ -2,7 +2,7 @@ import type { GameState, Station, Order, FoodId, CookSlot, StagedItem } from './
 import { FOOD, LEVELS, INTERACT_RANGE, PARTIAL_SPOIL_TIME, STAGED_SPOIL_TIME, OVERHEAD_COST } from './config';
 import { nearestStation } from './kitchen';
 import { getFloats, tickFloats } from './effects';
-import { xpProgress, getProfile, getTotalXP } from './profile';
+import { xpProgress, getProfile, getTotalXP, getDailyXP, getDailyMultiplier, DAILY_MULT_THRESHOLDS } from './profile';
 
 // ─── Order name abbreviations ─────────────────────────────────────────────────
 
@@ -915,6 +915,44 @@ function drawHUD(gs: GameState): void {
     ctx.fillText('MAX RANK', hudX, y);
   }
   y += 13;
+
+  // ── Daily XP multiplier bar ───────────────────────────────────────────────
+  {
+    const mult      = getDailyMultiplier();
+    const dailyXP   = getDailyXP();
+    const multColors = ['#888', '#6af', '#4f8', '#ff8', '#f84'];
+    const color      = multColors[mult - 1] ?? '#f84';
+    const isMax      = mult >= DAILY_MULT_THRESHOLDS.length;
+
+    ctx.font = '10px monospace'; ctx.fillStyle = color;
+    ctx.fillText(`x${mult} STREAK`, hudX, y); y += 4;
+
+    const mbarW = barW, mbarH = 5;
+    const mbarX = hudX - mbarW;
+    let   mFrac = 1;
+    if (!isMax) {
+      const lo = DAILY_MULT_THRESHOLDS[mult - 1];
+      const hi = DAILY_MULT_THRESHOLDS[mult];
+      mFrac = Math.min(1, (dailyXP - lo) / Math.max(1, hi - lo));
+    }
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(mbarX, y, mbarW, mbarH);
+    ctx.fillStyle = color;
+    ctx.fillRect(mbarX, y, Math.round(mbarW * mFrac), mbarH);
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+    ctx.strokeRect(mbarX, y, mbarW, mbarH);
+    y += mbarH + 3;
+
+    ctx.font = '9px monospace'; ctx.fillStyle = color;
+    if (isMax) {
+      ctx.fillText('MAX STREAK', hudX, y);
+    } else {
+      const lo = DAILY_MULT_THRESHOLDS[mult - 1];
+      const hi = DAILY_MULT_THRESHOLDS[mult];
+      ctx.fillText(`${dailyXP - lo}/${hi - lo} → x${mult + 1}`, hudX, y);
+    }
+    y += 13;
+  }
 
   // Divider
   ctx.strokeStyle = '#444'; ctx.lineWidth = 1;

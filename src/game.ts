@@ -187,8 +187,8 @@ export function tickGame(gs: GameState, dt: number): void {
         gs.score -= overhead;
         gs.phase = 'level_end';
         gs.levelEndTimer = 20000;
-        const stageXP = 10 * gs.level;
-        awardXP(stageXP); xpBreakdown.stage += stageXP;
+        const stageXP = awardXP(10 * gs.level);
+        xpBreakdown.stage += stageXP;
         spawnFloat(gs.player.x, gs.player.y - 40, `+${stageXP} XP!`, '#ff8', 2500);
       }
       return;
@@ -427,7 +427,7 @@ function tickStaged(gs: GameState, dt: number): void {
             o.status = 'plating';
             gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
             incrementStat('plates_completed', 1);
-            awardXP(1); xpBreakdown.orders += 1;
+            xpBreakdown.orders += awardXP(1);
           }
         }
         continue;
@@ -444,7 +444,7 @@ function tickStaged(gs: GameState, dt: number): void {
           o.status = 'plating';
           gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
           incrementStat('plates_completed', 1);
-          awardXP(1); xpBreakdown.orders += 1;
+          xpBreakdown.orders += awardXP(1);
         }
       }
     }
@@ -476,8 +476,8 @@ function tickChop(gs: GameState, dt: number): void {
       gs.chopOutput += 4;
       gs.chopProgress = 0;
       gs.chopOutputTimer = 0; gs.chopOutputSpoiled = false;
-      awardXP(2); xpBreakdown.actions += 2; incrementStat('bbq_chops', 1);
-      spawnFloat(gs.player.x, gs.player.y - 30, '+2 XP', '#6af');
+      const chopXP = awardXP(2); xpBreakdown.actions += chopXP; incrementStat('bbq_chops', 1);
+      spawnFloat(gs.player.x, gs.player.y - 30, `+${chopXP} XP`, '#6af');
     }
   }
 }
@@ -757,8 +757,8 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
         }
         p.held = { food: 'cheese_patty', count: converts, burned: false };
         incrementStat('cheese_melted', converts);
-        awardXP(1); xpBreakdown.actions += 1;
-        spawnFloat(p.x, p.y - 30, '+1 XP', '#6af');
+        { const xp = awardXP(1); xpBreakdown.actions += xp;
+          spawnFloat(p.x, p.y - 30, `+${xp} XP`, '#6af'); }
       }
       return;
     }
@@ -770,17 +770,17 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
         gs.score -= cost; gs.levelCOGS += cost;
         if (s.kind === 'grill') {
           incrementStat('grill_uses', 1);
-          awardXP(1); xpBreakdown.cooking += 1;
-          spawnFloat(p.x, p.y - 30, '+1 XP', '#6af');
+          { const xp = awardXP(1); xpBreakdown.cooking += xp;
+            spawnFloat(p.x, p.y - 30, `+${xp} XP`, '#6af'); }
         }
         if (s.kind === 'fryer') {
           incrementStat('fryer_uses', 1);
-          awardXP(1); xpBreakdown.cooking += 1;
-          spawnFloat(p.x, p.y - 30, '+1 XP', '#6af');
+          { const xp = awardXP(1); xpBreakdown.cooking += xp;
+            spawnFloat(p.x, p.y - 30, `+${xp} XP`, '#6af'); }
         }
         if (p.held.food === 'raw_pork' && s.kind === 'smoker') {
-          awardXP(3); xpBreakdown.cooking += 3;
-          spawnFloat(p.x, p.y - 30, '+3 XP', '#6af');
+          { const xp = awardXP(3); xpBreakdown.cooking += xp;
+            spawnFloat(p.x, p.y - 30, `+${xp} XP`, '#6af'); }
         }
         if (p.held.food === 'raw_pork' && s.kind === 'smoker') {
           const newSlot = s.slots.find(sl => sl.food === 'raw_pork' && sl.state === 'cooking' && sl.smokerPlacedLevel === undefined);
@@ -896,14 +896,14 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
           if (food === 'fries' || food === 'rings') {
             gs.staged.push({ food, spoilTimer: 0, spoiled: false, count: 1 });
           }
-          awardXP(1); xpBreakdown.orders += 1;
-          spawnFloat(p.x, p.y - 30, '+1 XP', '#6af');
+          { const xp = awardXP(1); xpBreakdown.orders += xp;
+            spawnFloat(p.x, p.y - 30, `+${xp} XP`, '#6af'); }
           if (o.items.every(i => i.done)) {
             o.status = 'plating';
             gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
             incrementStat('plates_completed', 1);
-            awardXP(1); xpBreakdown.orders += 1;
-            spawnFloat(p.x, p.y - 50, '+1 XP (plate!)', '#adf');
+            { const xp = awardXP(1); xpBreakdown.orders += xp;
+              spawnFloat(p.x, p.y - 50, `+${xp} XP (plate!)`, '#adf'); }
           }
           return;
         }
@@ -911,8 +911,8 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
       // No order needs it yet — stage it on the prep table (+1 XP for placing food)
       const stageCount = (p.held.food === 'fries' || p.held.food === 'rings') ? 2 : 1;
       gs.staged.push({ food: p.held.food, spoilTimer: 0, spoiled: false, count: stageCount });
-      awardXP(1); xpBreakdown.orders += 1;
-      spawnFloat(p.x, p.y - 30, '+1 XP', '#6af');
+      { const xp = awardXP(1); xpBreakdown.orders += xp;
+        spawnFloat(p.x, p.y - 30, `+${xp} XP`, '#6af'); }
       p.held.count--;
       if (p.held.count <= 0) p.held = null;
     }
@@ -947,11 +947,11 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
         gs.levelSatisfactionSum += sat;
         gs.levelSatisfactionCount++;
         order.status = 'failed'; // remove from ticket board
-        awardXP(1); xpBreakdown.delivery += 1;
-        spawnFloat(p.x, p.y - 30, '+1 XP', '#6af');
+        { const xp = awardXP(1); xpBreakdown.delivery += xp;
+          spawnFloat(p.x, p.y - 30, `+${xp} XP`, '#6af'); }
         if (sat === 100) {
-          awardXP(5); xpBreakdown.delivery += 5;
-          spawnFloat(p.x, p.y - 50, '+5 XP!', '#4f8');
+          const xp = awardXP(5); xpBreakdown.delivery += xp;
+          spawnFloat(p.x, p.y - 50, `+${xp} XP!`, '#4f8');
         }
         const [base] = order.name.split('+');
         const mealStat = MEAL_STAT_MAP[base.trim()];

@@ -7,6 +7,8 @@ export interface UserProfile {
   level: number;
   stats: Record<string, number>;
   achievements: Record<string, number>; // id -> highest 0-based tier index unlocked
+  dailyXP: number;       // effective XP earned in the current 24-hour window
+  dailyXPStart: number;  // ms timestamp when the current window started
 }
 
 export const LEVEL_THRESHOLDS: number[] = [
@@ -81,10 +83,33 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id:'total_labor',         name:'Payroll Pro',        desc:'Total labor cost paid across all sessions',       stat:'total_labor',           tiers:DOLLAR,  xpPerTier:DLRXP   },
 ];
 
+// ── Daily XP multiplier ───────────────────────────────────────────────────────
+
+// Thresholds are cumulative effective XP earned in a 24-hour window.
+// x1 → x2 at 1 000, x3 at 3 000 (+2 k), x4 at 7 000 (+4 k), x5 at 15 000 (+8 k).
+export const DAILY_MULT_THRESHOLDS = [0, 1000, 3000, 7000, 15000];
+
+// Returns effective XP accumulated in the current 24-hour window (committed + pending).
+export function getDailyXP(): number {
+  if (!_profile) return _pendingDailyXP;
+  const expired = Date.now() - (_profile.dailyXPStart ?? 0) >= 86_400_000;
+  return (expired ? 0 : (_profile.dailyXP ?? 0)) + _pendingDailyXP;
+}
+
+export function getDailyMultiplier(): number {
+  const daily = getDailyXP();
+  let mult = 1;
+  for (let i = 1; i < DAILY_MULT_THRESHOLDS.length; i++) {
+    if (daily >= DAILY_MULT_THRESHOLDS[i]) mult = i + 1; else break;
+  }
+  return mult;
+}
+
 // ── Module state ──────────────────────────────────────────────────────────────
 
 let _profile: UserProfile | null = null;
 let _pendingXP = 0;
+let _pendingDailyXP = 0;
 let _dirty = false;
 
 type LevelUpCb  = (oldLv: number, newLv: number) => void;
@@ -119,29 +144,41 @@ export function getProfile(): UserProfile | null { return _profile; }
 export async function loadProfile(uid: string): Promise<UserProfile> {
   const r = doc(db, 'profiles', uid);
   const snap = await getDoc(r);
+  const now = Date.now();
   if (snap.exists()) {
     _profile = snap.data() as UserProfile;
     _profile.stats        ??= {};
     _profile.achievements ??= {};
+    _profile.dailyXP      ??= 0;
+    _profile.dailyXPStart ??= now;
+    if (now - _profile.dailyXPStart >= 86_400_000) {
+      _profile.dailyXP = 0;
+      _profile.dailyXPStart = now;
+    }
   } else {
-    _profile = { uid, xp: 0, level: 1, stats: {}, achievements: {} };
+    _profile = { uid, xp: 0, level: 1, stats: {}, achievements: {}, dailyXP: 0, dailyXPStart: now };
     await setDoc(r, _profile);
   }
-  _pendingXP = 0; _dirty = false; _notifiedLevel = 0;
+  _pendingXP = 0; _pendingDailyXP = 0; _dirty = false; _notifiedLevel = 0;
   return _profile;
 }
 
 export function clearProfile(): void {
-  _profile = null; _pendingXP = 0; _dirty = false; _notifiedLevel = 0;
+  _profile = null; _pendingXP = 0; _pendingDailyXP = 0; _dirty = false; _notifiedLevel = 0;
 }
 
 // ── XP ────────────────────────────────────────────────────────────────────────
 
-export function awardXP(amount: number): void {
-  if (!_profile) return;
-  _pendingXP += amount;
+// Applies the current daily multiplier and returns the effective XP awarded.
+export function awardXP(amount: number): number {
+  if (!_profile) return 0;
+  const mult = getDailyMultiplier();
+  const effective = amount * mult;
+  _pendingXP += effective;
+  _pendingDailyXP += effective;
   _dirty = true;
   _checkEarlyLevelUp();
+  return effective;
 }
 
 // Total XP including in-session pending — use this for the live XP bar.
@@ -152,6 +189,7 @@ export function getTotalXP(): number {
 // Wipe pending XP without saving — used when ending a session with no reward (inactivity).
 export function clearPendingXP(): void {
   _pendingXP = 0;
+  _pendingDailyXP = 0;
   _dirty = false;
   _notifiedLevel = 0;
 }
@@ -198,6 +236,15 @@ function _checkAchievements(key: string, oldVal: number, newVal: number): void {
 export async function flushSession(): Promise<void> {
   if (!_profile || !_dirty) return;
   const oldLevel = _profile.level;
+  const now = Date.now();
+  // Commit daily XP (roll the window if it expired)
+  if (now - (_profile.dailyXPStart ?? 0) >= 86_400_000) {
+    _profile.dailyXP = _pendingDailyXP;
+    _profile.dailyXPStart = now;
+  } else {
+    _profile.dailyXP = (_profile.dailyXP ?? 0) + _pendingDailyXP;
+  }
+  _pendingDailyXP = 0;
   _profile.xp   += _pendingXP;
   _pendingXP     = 0;
   _dirty         = false;
@@ -206,6 +253,7 @@ export async function flushSession(): Promise<void> {
     await updateDoc(doc(db, 'profiles', _profile.uid), {
       xp: _profile.xp, level: _profile.level,
       stats: _profile.stats, achievements: _profile.achievements,
+      dailyXP: _profile.dailyXP, dailyXPStart: _profile.dailyXPStart,
     });
     if (_profile.level > oldLevel) _onLevelUp?.(oldLevel, _profile.level);
   } catch (e) {
