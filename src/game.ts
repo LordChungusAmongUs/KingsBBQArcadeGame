@@ -201,12 +201,15 @@ function tickFamiliar(gs: GameState, dt: number): void {
 export const boostedStationIds = new Set<string>();
 let _boostParticleTimer = 0;
 
+const BOOST_RANGE = INTERACT_RANGE * 2.5;
+
 function tickCookBoost(gs: GameState, dt: number): void {
   boostedStationIds.clear();
-  if (!input.interactHeld) { _boostParticleTimer = 0; return; }
+  // Use keys.has for real-time state — interactHeld has a one-frame lag vs tickGame
+  if (!keys.has('KeyE')) { _boostParticleTimer = 0; return; }
   for (const s of gs.stations) {
     if (s.kind !== 'grill' && s.kind !== 'fryer') continue;
-    if (distToStation(gs.player.x, gs.player.y, s) >= INTERACT_RANGE) continue;
+    if (distToStation(gs.player.x, gs.player.y, s) >= BOOST_RANGE) continue;
     let anyBoosted = false;
     for (const slot of s.slots) {
       if (slot.state === 'cooking') { slot.timer += dt; anyBoosted = true; }
@@ -215,9 +218,9 @@ function tickCookBoost(gs: GameState, dt: number): void {
   }
   if (boostedStationIds.size > 0) {
     _boostParticleTimer += dt;
-    if (_boostParticleTimer >= 400) {
+    if (_boostParticleTimer >= 500) {
       _boostParticleTimer = 0;
-      spawnFloat(gs.player.x, gs.player.y - 30, '⚡2X', '#ff8');
+      spawnFloat(gs.player.x, gs.player.y - 40, '⚡2X COOK', '#ff8');
     }
   }
 }

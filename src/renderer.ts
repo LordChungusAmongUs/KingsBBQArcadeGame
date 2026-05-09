@@ -182,10 +182,11 @@ function drawStations(gs: GameState): void {
     }
 
     // Label
-    ctx.fillStyle = '#ddd';
-    ctx.font = 'bold 11px monospace';
+    const isBoosted = boostedStationIds.has(s.id);
+    ctx.fillStyle = isBoosted ? '#ff8' : '#ddd';
+    ctx.font = `bold 11px monospace`;
     ctx.textAlign = 'center';
-    ctx.fillText(s.label, s.x + s.w / 2, s.y + 14);
+    ctx.fillText(isBoosted ? `⚡ ${s.label}` : s.label, s.x + s.w / 2, s.y + 14);
 
     // Cook slots
     if (s.kind === 'warmer') {
