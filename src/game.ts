@@ -1,8 +1,8 @@
 import type { GameState, Order, FoodId, HeldItem, StagedItem, CookSlot } from './types';
 import { LEVELS, ORDERS, FOOD, MEAL_PRICES, INTERACT_RANGE, PLAYER_SPEED, PARTIAL_SPOIL_TIME, STAGED_SPOIL_TIME, LABOR_RATE, OVERTIME_LABOR_RATE, BASE_MAX_FAILS, UPSET_THRESHOLDS, ORDER_DEFS } from './config';
 import { buildStations, tickCooking, nearestStation, distToStation, placeOnStation, pickupFromStation } from './kitchen';
-import { input, keys, wasdDash, arrowDash, wasdPressTime, arrowPressTime } from './input';
-import { awardXP, incrementStat } from './profile';
+import { input, keys, wasdDash, arrowDash, wasdPressTime, arrowPressTime, jumpPressed, isJump1Held, isJump2Held, notifyDashEnd } from './input';
+import { awardXP, incrementStat, hasUnlock, getProfile } from './profile';
 import { spawnFloat, xpBreakdown } from './effects';
 
 // Remote player input — set by net handlers; avoids injecting into the shared keys Set
@@ -12,6 +12,10 @@ export const remoteInput = {
   p3: { up: false, down: false, left: false, right: false },
   p4: { up: false, down: false, left: false, right: false },
 };
+
+// ── Familiar state ────────────────────────────────────────────────────────────
+let _famX = 0, _famY = 0, _famEatTimer = 0;
+export function getFamiliarPos(): { x: number; y: number } { return { x: _famX, y: _famY }; }
 
 // ── Dash mechanic ─────────────────────────────────────────────────────────────
 const DASH_DISTANCE = 240; // ~4 floor tiles at 2× speed
@@ -61,10 +65,10 @@ export function createGame(level: number, carryScore = 0, playerCount = 1, smoke
   const lvl = LEVELS[level - 1];
   const coop = playerCount > 1;
   const game: GameState = {
-    player:  { x: 540, y: 430, vx: 0, vy: 0, held: null, radius: 18, facing: 0, walkFrame: 0 },
-    player2: playerCount >= 2 ? { x: 630, y: 430, vx: 0, vy: 0, held: null, radius: 18, facing: Math.PI, walkFrame: 0 } : null,
-    player3: playerCount >= 3 ? { x: 540, y: 540, vx: 0, vy: 0, held: null, radius: 18, facing: 0, walkFrame: 0 } : null,
-    player4: playerCount >= 4 ? { x: 630, y: 540, vx: 0, vy: 0, held: null, radius: 18, facing: Math.PI, walkFrame: 0 } : null,
+    player:  { x: 540, y: 430, vx: 0, vy: 0, held: null, familiarHeld: null, radius: 18, facing: 0, walkFrame: 0, jumping: false, jumpTimer: 0 },
+    player2: playerCount >= 2 ? { x: 630, y: 430, vx: 0, vy: 0, held: null, familiarHeld: null, radius: 18, facing: Math.PI, walkFrame: 0, jumping: false, jumpTimer: 0 } : null,
+    player3: playerCount >= 3 ? { x: 540, y: 540, vx: 0, vy: 0, held: null, familiarHeld: null, radius: 18, facing: 0, walkFrame: 0, jumping: false, jumpTimer: 0 } : null,
+    player4: playerCount >= 4 ? { x: 630, y: 540, vx: 0, vy: 0, held: null, familiarHeld: null, radius: 18, facing: Math.PI, walkFrame: 0, jumping: false, jumpTimer: 0 } : null,
     playerCount,
     coop,
     stations: buildStations(),
@@ -100,6 +104,7 @@ export function createGame(level: number, carryScore = 0, playerCount = 1, smoke
     tutorialOrderQueue: [],
     levelSatisfactionSum: 0,
     levelSatisfactionCount: 0,
+    meter: 0, meterActive: false, meterTimer: 0,
   };
   if (smokerSlots) {
     const smoker = game.stations.find(s => s.kind === 'smoker');
@@ -117,6 +122,102 @@ function calcOrderSatisfaction(order: Order): number {
   const totalItems = order.items.length;
   if (totalItems > 0) sat -= Math.round(order.burnedCount * (50 / totalItems));
   return Math.max(0, sat);
+}
+
+// ── Player-player collision ───────────────────────────────────────────────────
+
+function resolvePlayerCollision(gs: GameState): void {
+  const players = [gs.player, gs.player2, gs.player3, gs.player4].filter(Boolean) as import('./types').Player[];
+  for (let i = 0; i < players.length; i++) {
+    for (let j = i + 1; j < players.length; j++) {
+      const a = players[i], b = players[j];
+      if (a.jumping || b.jumping) continue;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const minD = a.radius + b.radius;
+      if (dist > 0 && dist < minD) {
+        const push = (minD - dist) / 2;
+        const nx = dx / dist, ny = dy / dist;
+        a.x -= nx * push; a.y -= ny * push;
+        b.x += nx * push; b.y += ny * push;
+      }
+    }
+  }
+}
+
+// ── Familiar ──────────────────────────────────────────────────────────────────
+
+function tickFamiliar(gs: GameState, dt: number): void {
+  if (!hasUnlock('familiar') && !gs.meterActive) return;
+  const ability = gs.meterActive ? 'all' : getProfile()?.familiarAbility;
+
+  // Spring-follow player
+  const targetX = gs.player.x + Math.cos(gs.player.facing + Math.PI) * 32;
+  const targetY = gs.player.y + Math.sin(gs.player.facing + Math.PI) * 32 + 10;
+  const spd = Math.min(1, dt / 140);
+  _famX += (targetX - _famX) * spd;
+  _famY += (targetY - _famY) * spd;
+
+  if (ability === 'cook_speed' || ability === 'all') {
+    if (input.interactHeld) {
+      const nearby = gs.stations.find(s =>
+        (s.kind === 'grill' || s.kind === 'fryer') &&
+        Math.hypot(s.x + s.w / 2 - gs.player.x, s.y + s.h / 2 - gs.player.y) < INTERACT_RANGE * 1.6
+      );
+      if (nearby) {
+        for (const slot of nearby.slots) {
+          if (slot.state === 'cooking') slot.timer += dt;
+        }
+      }
+    }
+  }
+
+  if (ability === 'eat_leftovers' || ability === 'all') {
+    _famEatTimer += dt;
+    if (_famEatTimer >= 5000) {
+      _famEatTimer = 0;
+      const idx = gs.staged.findIndex(s => s.spoiled);
+      if (idx !== -1) {
+        gs.staged.splice(idx, 1);
+        spawnFloat(_famX, _famY - 20, 'NOM!', '#4f8');
+      }
+    }
+  }
+
+  if (ability === 'carry' || ability === 'all') {
+    const famDist = Math.hypot(gs.player.x - _famX, gs.player.y - _famY);
+    if (input.interactPressed && famDist < 55) {
+      const tmp = gs.player.held;
+      gs.player.held = gs.player.familiarHeld;
+      gs.player.familiarHeld = tmp;
+    }
+  }
+}
+
+// ── Special meter (level 13) ──────────────────────────────────────────────────
+
+function tickMeter(gs: GameState, dt: number): void {
+  if (!hasUnlock('spec_meter') && !gs.meterActive) return;
+  if (gs.meterActive) {
+    gs.meterTimer -= dt;
+    if (gs.meterTimer <= 0) {
+      gs.meterActive = false; gs.meterTimer = 0;
+      spawnFloat(gs.player.x, gs.player.y - 60, 'FULL SEND OVER', '#888', 1500);
+    }
+    return;
+  }
+  // Spin detection: all 4 WASD keys pressed within 700ms
+  if (gs.meter >= 100) {
+    const { up, down, left, right } = wasdPressTime;
+    if (up > 0 && down > 0 && left > 0 && right > 0) {
+      const oldest = Math.min(up, down, left, right);
+      const newest = Math.max(up, down, left, right);
+      if (newest - oldest < 700) {
+        gs.meterActive = true; gs.meterTimer = 10000; gs.meter = 0;
+        spawnFloat(gs.player.x, gs.player.y - 60, 'FULL SEND!', '#ff8', 2500);
+      }
+    }
+  }
 }
 
 export function tickGame(gs: GameState, dt: number): void {
@@ -205,10 +306,13 @@ export function tickGame(gs: GameState, dt: number): void {
     if (gs.chopOutputTimer >= STAGED_SPOIL_TIME) gs.chopOutputSpoiled = true;
   }
   tickMenu(gs);
+  tickFamiliar(gs, dt);
+  tickMeter(gs, dt);
   tickPlayer(gs, dt);
   if (gs.coop && gs.player2) tickPlayer2(gs, dt);
   if (gs.player3) tickPlayer3(gs, dt);
   if (gs.player4) tickPlayer4(gs, dt);
+  resolvePlayerCollision(gs);
   if (input.interactPressed)   doInteract(gs, 1);
   if (input.p2InteractPressed) doInteract(gs, 2);
   if (input.p3InteractPressed) doInteract(gs, 3);
@@ -470,7 +574,9 @@ function tickSmoker(gs: GameState): void {
 
 function tickChop(gs: GameState, dt: number): void {
   if (gs.chopStored > 0 && gs.chopProgress > 0) {
-    gs.chopProgress += dt;
+    const chopMult = (hasUnlock('familiar') || gs.meterActive) &&
+      (getProfile()?.familiarAbility === 'chop_speed' || gs.meterActive) ? 2 : 1;
+    gs.chopProgress += dt * chopMult;
     if (gs.chopProgress >= 2000) {
       gs.chopStored--;
       gs.chopOutput += 4;
@@ -537,14 +643,24 @@ function tickPlayer(gs: GameState, dt: number): void {
     up = keys.has('KeyW') || keys.has('ArrowUp'); dn = keys.has('KeyS') || keys.has('ArrowDown');
     lt = keys.has('KeyA') || keys.has('ArrowLeft'); rt = keys.has('KeyD') || keys.has('ArrowRight');
   }
-  // Consume dash trigger (event-driven from input.ts)
+  // Jump (level 10 mount unlock or meter active)
+  if (jumpPressed.p1 && (hasUnlock('mount') || gs.meterActive)) {
+    p.jumping = true; p.jumpTimer = 600;
+  }
+  if (p.jumping) {
+    p.jumpTimer -= dt;
+    if (p.jumpTimer <= 0) { p.jumping = false; p.jumpTimer = 0; }
+  }
+
+  // Consume dash trigger — gated behind level 3 or meter active
+  const canDash = hasUnlock('dash') || gs.meterActive;
   if (remoteInput.useRemote) {
-    if (arrowDash.active) { triggerDash(0, arrowDash.dx, arrowDash.dy); arrowDash.active = false; }
+    if (arrowDash.active) { if (canDash) triggerDash(0, arrowDash.dx, arrowDash.dy); arrowDash.active = false; }
   } else if (gs.coop) {
-    if (wasdDash.active) { triggerDash(0, wasdDash.dx, wasdDash.dy); wasdDash.active = false; }
+    if (wasdDash.active) { if (canDash) triggerDash(0, wasdDash.dx, wasdDash.dy); wasdDash.active = false; }
   } else {
-    if (wasdDash.active) { triggerDash(0, wasdDash.dx, wasdDash.dy); wasdDash.active = false; }
-    else if (arrowDash.active) { triggerDash(0, arrowDash.dx, arrowDash.dy); arrowDash.active = false; }
+    if (wasdDash.active) { if (canDash) triggerDash(0, wasdDash.dx, wasdDash.dy); wasdDash.active = false; }
+    else if (arrowDash.active) { if (canDash) triggerDash(0, arrowDash.dx, arrowDash.dy); arrowDash.active = false; }
   }
   const dash = _dash[0];
   let dx = 0, dy = 0, spd: number;
@@ -552,7 +668,12 @@ function tickPlayer(gs: GameState, dt: number): void {
   if (dash.remaining > 0 && held0) {
     dx = dash.dx; dy = dash.dy;
     spd = PLAYER_SPEED * 2 * dt / 1000;
+    const prevR = dash.remaining;
     dash.remaining = Math.max(0, dash.remaining - spd);
+    // Notify double-dash system when this dash completes
+    if (prevR > 0 && dash.remaining <= 0 && (hasUnlock('double_dash') || gs.meterActive)) {
+      notifyDashEnd(0, dash.dx, dash.dy);
+    }
   } else {
     if (!held0) dash.remaining = 0;
     // Moonwalk: both opposing directions held → move in direction of EARLIER-pressed key, face opposite
@@ -563,7 +684,9 @@ function tickPlayer(gs: GameState, dt: number): void {
     if (bothUD) { dy = pt.down < pt.up ? 1 : -1; }
     else        { if (up) dy -= 1; if (dn) dy += 1; }
     if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
-    spd = PLAYER_SPEED * dt / 1000;
+    // Mount speed bonus (level 10)
+    const mountMult = (hasUnlock('mount') || gs.meterActive) ? (hasUnlock('mount_up') ? 2.0 : 1.6) : 1.0;
+    spd = PLAYER_SPEED * dt / 1000 * mountMult;
     if (dx !== 0 || dy !== 0) {
       if (bothLR || bothUD) p.facing = Math.atan2(-dy, -dx);
       else p.facing = Math.atan2(dy, dx);
@@ -584,15 +707,31 @@ function tickPlayer2(gs: GameState, dt: number): void {
   }
   const p = gs.player2;
   const pk = remoteInput.useRemote ? remoteInput.p2 : { up: keys.has('ArrowUp'), down: keys.has('ArrowDown'), left: keys.has('ArrowLeft'), right: keys.has('ArrowRight') };
+  // Jump P2
+  if (jumpPressed.p2 && (hasUnlock('mount') || gs.meterActive)) {
+    p.jumping = true; p.jumpTimer = 600;
+  }
+  if (p.jumping) {
+    p.jumpTimer -= dt;
+    if (p.jumpTimer <= 0) { p.jumping = false; p.jumpTimer = 0; }
+  }
+
   // Local coop P2 gets arrowDash; online P2 gets triggerDash via network
-  if (!remoteInput.useRemote && arrowDash.active) { triggerDash(1, arrowDash.dx, arrowDash.dy); arrowDash.active = false; }
+  const canDash2 = hasUnlock('dash') || gs.meterActive;
+  if (!remoteInput.useRemote && arrowDash.active) {
+    if (canDash2) triggerDash(1, arrowDash.dx, arrowDash.dy); arrowDash.active = false;
+  }
   const dash = _dash[1];
   let dx = 0, dy = 0, spd: number;
   const held1 = (dash.dx < 0 && pk.left) || (dash.dx > 0 && pk.right) || (dash.dy < 0 && pk.up) || (dash.dy > 0 && pk.down);
   if (dash.remaining > 0 && held1) {
     dx = dash.dx; dy = dash.dy;
     spd = PLAYER_SPEED * 2 * dt / 1000;
+    const prevR2 = dash.remaining;
     dash.remaining = Math.max(0, dash.remaining - spd);
+    if (prevR2 > 0 && dash.remaining <= 0 && (hasUnlock('double_dash') || gs.meterActive)) {
+      notifyDashEnd(1, dash.dx, dash.dy);
+    }
   } else {
     if (!held1) dash.remaining = 0;
     // Moonwalk for local P2 (arrow keys) — only when not online
@@ -602,7 +741,8 @@ function tickPlayer2(gs: GameState, dt: number): void {
     if (!remoteInput.useRemote && bothUD2) { dy = arrowPressTime.down < arrowPressTime.up ? 1 : -1; }
     else { if (pk.up) dy -= 1; if (pk.down) dy += 1; }
     if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
-    spd = PLAYER_SPEED * dt / 1000;
+    const mountMult2 = (hasUnlock('mount') || gs.meterActive) ? (hasUnlock('mount_up') ? 2.0 : 1.6) : 1.0;
+    spd = PLAYER_SPEED * dt / 1000 * mountMult2;
     const moonwalking2 = !remoteInput.useRemote && (bothLR2 || bothUD2);
     if (dx !== 0 || dy !== 0) {
       if (moonwalking2) p.facing = Math.atan2(-dy, -dx);
@@ -947,6 +1087,8 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
         gs.levelSatisfactionSum += sat;
         gs.levelSatisfactionCount++;
         order.status = 'failed'; // remove from ticket board
+        // Charge the special meter
+        if (hasUnlock('spec_meter')) gs.meter = Math.min(100, gs.meter + 25);
         { const xp = awardXP(1); xpBreakdown.delivery += xp;
           spawnFloat(p.x, p.y - 30, `+${xp} XP`, '#6af'); }
         if (sat === 100) {

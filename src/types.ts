@@ -54,9 +54,12 @@ export interface Player {
   x: number; y: number;
   vx: number; vy: number;
   held: HeldItem | null;
+  familiarHeld: HeldItem | null;  // item carried by familiar (ability: carry)
   radius: number;
   facing: number;
   walkFrame: number;
+  jumping: boolean;
+  jumpTimer: number;   // ms remaining in jump
 }
 
 export interface Plate {
@@ -110,8 +113,11 @@ export interface GameState {
   levelPorkCooked: number;      // pork shoulders smoked this level
   levelGrillFryerCooked: number; // items finished on grill or fryer this level
   salesByItem: Record<string, { count: number; revenue: number }>;
-  levelSatisfactionSum: number;   // sum of per-order satisfaction scores (0-100) this level
-  levelSatisfactionCount: number; // total orders counted (served + walked out)
+  levelSatisfactionSum: number;
+  levelSatisfactionCount: number;
+  meter: number;        // 0–100 special meter (level 13 unlock)
+  meterActive: boolean;
+  meterTimer: number;   // ms remaining while meter is active
 }
 
 export interface FoodDef {

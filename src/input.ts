@@ -9,14 +9,31 @@ const _wasdRel  = { up: 0, down: 0, left: 0, right: 0 };
 const _arrowRel = { up: 0, down: 0, left: 0, right: 0 };
 const DASH_WIN   = 80;   // ms: max gap between release and re-press
 const MAX_TAP_MS = 150;  // ms: first press must be this short to count as a tap
+const DDASH_WIN  = 400;  // ms window after a dash ends to allow double-dash
 
 export const wasdDash  = { dx: 0, dy: 0, active: false };
 export const arrowDash = { dx: 0, dy: 0, active: false };
 
+// Double-dash: game.ts calls notifyDashEnd when a dash completes; the next
+// keydown in the same direction within DDASH_WIN fires another dash.
+export const dashEnded = [
+  { dx: 0, dy: 0, t: 0 },  // P1
+  { dx: 0, dy: 0, t: 0 },  // P2
+];
+export function notifyDashEnd(pNum: 0 | 1, dx: number, dy: number): void {
+  dashEnded[pNum] = { dx, dy, t: Date.now() };
+}
+
+// Jump state (ShiftLeft = P1, ShiftRight = P2)
+export const jumpPressed = { p1: false, p2: false };
+let _jump1Down = false, _jump2Down = false;
+export function isJump1Held(): boolean { return _jump1Down; }
+export function isJump2Held(): boolean { return _jump2Down; }
+
 export const input = {
   interactPressed: false,
   interactHeld: false,
-  spacePressed: false,  // raw Space press, unambiguous (not shared with network P2 signal)
+  spacePressed: false,
 
   menuPickUp:    false,
   menuPickLeft:  false,
@@ -57,8 +74,11 @@ export function initInput(): void {
     if (e.code === 'ArrowRight') input.p2MenuPickRight = true;
     if (e.code === 'ArrowDown')  input.p2MenuPickDown  = true;
 
+    // Jump keys
+    if (e.code === 'ShiftLeft')  { _jump1Down = true; jumpPressed.p1 = true; }
+    if (e.code === 'ShiftRight') { _jump2Down = true; jumpPressed.p2 = true; }
+
     // Dash: check BEFORE updating press time so tap-duration uses the PREVIOUS press.
-    // (Updating press time first would make the tap-duration check always near-zero.)
     const _t = Date.now();
     if (e.code === 'KeyW'       && _t - _wasdRel.up    < DASH_WIN && _wasdRel.up    - wasdPressTime.up    < MAX_TAP_MS) { wasdDash.dx=0;  wasdDash.dy=-1; wasdDash.active=true; }
     if (e.code === 'KeyS'       && _t - _wasdRel.down  < DASH_WIN && _wasdRel.down  - wasdPressTime.down  < MAX_TAP_MS) { wasdDash.dx=0;  wasdDash.dy=1;  wasdDash.active=true; }
@@ -68,6 +88,16 @@ export function initInput(): void {
     if (e.code === 'ArrowDown'  && _t - _arrowRel.down  < DASH_WIN && _arrowRel.down  - arrowPressTime.down  < MAX_TAP_MS) { arrowDash.dx=0;  arrowDash.dy=1;  arrowDash.active=true; }
     if (e.code === 'ArrowLeft'  && _t - _arrowRel.left  < DASH_WIN && _arrowRel.left  - arrowPressTime.left  < MAX_TAP_MS) { arrowDash.dx=-1; arrowDash.dy=0;  arrowDash.active=true; }
     if (e.code === 'ArrowRight' && _t - _arrowRel.right < DASH_WIN && _arrowRel.right - arrowPressTime.right < MAX_TAP_MS) { arrowDash.dx=1;  arrowDash.dy=0;  arrowDash.active=true; }
+
+    // Double-dash: fires when a dash recently ended in this direction
+    if (e.code === 'KeyW'       && dashEnded[0].dy < 0 && _t - dashEnded[0].t < DDASH_WIN) { wasdDash.dx=0;  wasdDash.dy=-1; wasdDash.active=true; dashEnded[0].t=0; }
+    if (e.code === 'KeyS'       && dashEnded[0].dy > 0 && _t - dashEnded[0].t < DDASH_WIN) { wasdDash.dx=0;  wasdDash.dy=1;  wasdDash.active=true; dashEnded[0].t=0; }
+    if (e.code === 'KeyA'       && dashEnded[0].dx < 0 && _t - dashEnded[0].t < DDASH_WIN) { wasdDash.dx=-1; wasdDash.dy=0;  wasdDash.active=true; dashEnded[0].t=0; }
+    if (e.code === 'KeyD'       && dashEnded[0].dx > 0 && _t - dashEnded[0].t < DDASH_WIN) { wasdDash.dx=1;  wasdDash.dy=0;  wasdDash.active=true; dashEnded[0].t=0; }
+    if (e.code === 'ArrowUp'    && dashEnded[1].dy < 0 && _t - dashEnded[1].t < DDASH_WIN) { arrowDash.dx=0;  arrowDash.dy=-1; arrowDash.active=true; dashEnded[1].t=0; }
+    if (e.code === 'ArrowDown'  && dashEnded[1].dy > 0 && _t - dashEnded[1].t < DDASH_WIN) { arrowDash.dx=0;  arrowDash.dy=1;  arrowDash.active=true; dashEnded[1].t=0; }
+    if (e.code === 'ArrowLeft'  && dashEnded[1].dx < 0 && _t - dashEnded[1].t < DDASH_WIN) { arrowDash.dx=-1; arrowDash.dy=0;  arrowDash.active=true; dashEnded[1].t=0; }
+    if (e.code === 'ArrowRight' && dashEnded[1].dx > 0 && _t - dashEnded[1].t < DDASH_WIN) { arrowDash.dx=1;  arrowDash.dy=0;  arrowDash.active=true; dashEnded[1].t=0; }
 
     // Update press times AFTER dash check
     if (e.code === 'KeyW')       wasdPressTime.up    = _t;
@@ -81,7 +111,9 @@ export function initInput(): void {
   });
   window.addEventListener('keyup', e => {
     keys.delete(e.code);
-    if (e.code === 'KeyE') _interactDown = false;
+    if (e.code === 'KeyE')       _interactDown = false;
+    if (e.code === 'ShiftLeft')  _jump1Down    = false;
+    if (e.code === 'ShiftRight') _jump2Down    = false;
     const _t = Date.now();
     if (e.code === 'KeyW')       _wasdRel.up    = _t;
     if (e.code === 'KeyS')       _wasdRel.down  = _t;
@@ -115,6 +147,8 @@ export function flushFrame(): void {
   input.spacePressed    = false;
   wasdDash.active  = false;
   arrowDash.active = false;
+  jumpPressed.p1   = false;
+  jumpPressed.p2   = false;
 
   input.menuPickUp      = false;
   input.menuPickLeft    = false;

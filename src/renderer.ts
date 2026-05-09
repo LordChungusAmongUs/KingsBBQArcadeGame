@@ -2,7 +2,8 @@ import type { GameState, Station, Order, FoodId, CookSlot, StagedItem } from './
 import { FOOD, LEVELS, INTERACT_RANGE, PARTIAL_SPOIL_TIME, STAGED_SPOIL_TIME, OVERHEAD_COST } from './config';
 import { nearestStation } from './kitchen';
 import { getFloats, tickFloats } from './effects';
-import { xpProgress, getProfile, getTotalXP, getDailyXP, getDailyMultiplier, DAILY_MULT_THRESHOLDS } from './profile';
+import { xpProgress, getProfile, getTotalXP, getDailyXP, getDailyMultiplier, DAILY_MULT_THRESHOLDS, hasUnlock, SKIN_POOL } from './profile';
+import { getFamiliarPos } from './game';
 
 // ─── Order name abbreviations ─────────────────────────────────────────────────
 
@@ -703,19 +704,66 @@ function spriteFrame(wf: number, menuOpen: boolean, dir: 'up' | 'down' | 'left' 
 }
 
 function drawPlayer(gs: GameState): void {
-  drawPlayerSprite(gs.player, '#c8402a', gs.activeMenu?.owner === 1);
+  const prof = getProfile();
+  const skinId = prof?.activeSkin ?? 'default';
+  const skin = SKIN_POOL.find(s => s.id === skinId) ?? SKIN_POOL[0];
+  drawPlayerSprite(gs.player, skin.apronColor, gs.activeMenu?.owner === 1);
   if (gs.coop && gs.player2) drawPlayerSprite(gs.player2, '#2060c8', gs.activeMenu?.owner === 2);
   if (gs.player3) drawPlayerSprite(gs.player3, '#28a028', gs.activeMenu?.owner === 3);
   if (gs.player4) drawPlayerSprite(gs.player4, '#c8a020', gs.activeMenu?.owner === 4);
+  if (hasUnlock('familiar') || gs.meterActive) drawFamiliar(gs);
+}
+
+function drawFamiliar(gs: GameState): void {
+  const { x, y } = getFamiliarPos();
+  const bob = Math.sin(Date.now() / 300) * 3;
+  const ability = getProfile()?.familiarAbility;
+  const aColor = ability === 'cook_speed' ? '#f84' :
+                 ability === 'chop_speed' ? '#8f4' :
+                 ability === 'carry'       ? '#4af' :
+                 ability === 'eat_leftovers' ? '#fa4' : '#f8f';
+  const color = gs.meterActive ? '#ff8' : aColor;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath(); ctx.ellipse(x, y + 12, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+  // Body
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.ellipse(x, y + bob, 10, 9, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#fff4'; ctx.lineWidth = 1.5; ctx.stroke();
+  // Ears
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.ellipse(x - 7, y + bob - 10, 3, 5, -0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x + 7, y + bob - 10, 3, 5, 0.3, 0, Math.PI * 2); ctx.fill();
+  // Eyes
+  const ef = gs.player.facing;
+  const ex = Math.cos(ef) * 4, ey = Math.sin(ef) * 4;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(x + ex - Math.sin(ef) * 3, y + bob + ey + Math.cos(ef) * 3, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + ex + Math.sin(ef) * 3, y + bob + ey - Math.cos(ef) * 3, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#222';
+  ctx.beginPath(); ctx.arc(x + ex - Math.sin(ef) * 3 + Math.cos(ef) * 0.5, y + bob + ey + Math.cos(ef) * 3 + Math.sin(ef) * 0.5, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + ex + Math.sin(ef) * 3 + Math.cos(ef) * 0.5, y + bob + ey - Math.cos(ef) * 3 + Math.sin(ef) * 0.5, 1.5, 0, Math.PI * 2); ctx.fill();
+  // Familiar-carried item badge
+  if (gs.player.familiarHeld) {
+    const fhDef = FOOD.get(gs.player.familiarHeld.food);
+    ctx.fillStyle = fhDef?.color ?? '#aaa';
+    ctx.beginPath(); ctx.arc(x + 14, y + bob - 8, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawPlayerSprite(p: import('./types').Player, apronColor: string, menuOpen = false): void {
+  const jumpOff = p.jumping ? -22 : 0;
   ctx.save();
   ctx.translate(p.x, p.y);
 
-  // Shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath(); ctx.ellipse(0, 16, p.radius, 6, 0, 0, Math.PI * 2); ctx.fill();
+  // Shadow — stretches and fades while jumping
+  ctx.fillStyle = p.jumping ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 16, p.jumping ? p.radius * 1.5 : p.radius, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
 
   const dir = facingDir(p.facing);
   const frame = spriteFrame(p.walkFrame, menuOpen, dir);
@@ -723,8 +771,9 @@ function drawPlayerSprite(p: import('./types').Player, apronColor: string, menuO
   const spriteKey = `p1m_${mirrorRight ? 'left' : dir}_${frame}`;
   const img = _sprites[spriteKey];
 
-  // Body
+  // Body (shifted up while jumping)
   ctx.save();
+  ctx.translate(0, jumpOff);
   if (mirrorRight) ctx.scale(-1, 1);
   if (img) {
     ctx.drawImage(img, -SPRITE_W / 2, -SPRITE_H / 2, SPRITE_W, SPRITE_H);
@@ -744,10 +793,10 @@ function drawPlayerSprite(p: import('./types').Player, apronColor: string, menuO
   }
   ctx.restore();
 
-  // Held item (world space — never mirrored)
+  // Held item (world space — never mirrored, also lifted when jumping)
   if (p.held) {
     const holdX = Math.cos(p.facing) * (p.radius + 16);
-    const holdY = Math.sin(p.facing) * (p.radius + 16);
+    const holdY = Math.sin(p.facing) * (p.radius + 16) + jumpOff;
     if ((p.held.food as string) === '_plate_') {
       ctx.fillStyle = '#fff';
       ctx.beginPath(); ctx.ellipse(holdX, holdY, 14, 8, 0, 0, Math.PI * 2); ctx.fill();
@@ -951,6 +1000,28 @@ function drawHUD(gs: GameState): void {
       const hi = DAILY_MULT_THRESHOLDS[mult];
       ctx.fillText(`${dailyXP - lo}/${hi - lo} → x${mult + 1}`, hudX, y);
     }
+    y += 13;
+  }
+
+  // ── Special meter (level 13) ─────────────────────────────────────────────
+  if (hasUnlock('spec_meter') || gs.meterActive) {
+    const full    = gs.meter >= 100;
+    const mColor  = gs.meterActive ? '#ff8' : full ? '#f84' : '#a04';
+    const mLabel  = gs.meterActive
+      ? `FULL SEND! ${Math.ceil(gs.meterTimer / 1000)}s`
+      : full ? 'SPIN TO ACTIVATE!' : 'FULL SEND';
+    ctx.font = '10px monospace'; ctx.fillStyle = mColor;
+    ctx.fillText(mLabel, hudX, y); y += 4;
+    const smW = barW, smH = 5, smX = hudX - smW;
+    ctx.fillStyle = '#1a0a0a';
+    ctx.fillRect(smX, y, smW, smH);
+    ctx.fillStyle = mColor;
+    ctx.fillRect(smX, y, Math.round(smW * Math.min(1, gs.meter / 100)), smH);
+    ctx.strokeStyle = '#440'; ctx.lineWidth = 1;
+    ctx.strokeRect(smX, y, smW, smH);
+    y += smH + 3;
+    ctx.font = '9px monospace'; ctx.fillStyle = mColor;
+    ctx.fillText(gs.meterActive ? 'ALL ABILITIES ACTIVE' : `${gs.meter}/100`, hudX, y);
     y += 13;
   }
 

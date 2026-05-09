@@ -7,8 +7,55 @@ export interface UserProfile {
   level: number;
   stats: Record<string, number>;
   achievements: Record<string, number>; // id -> highest 0-based tier index unlocked
-  dailyXP: number;       // effective XP earned in the current 24-hour window
-  dailyXPStart: number;  // ms timestamp when the current window started
+  dailyXP: number;
+  dailyXPStart: number;
+  gender?: 'male' | 'female';
+  activeSkin?: string;
+  unlockedSkins?: string[];
+  familiarAbility?: FamiliarAbility;
+  prestige?: number;
+}
+
+export type FamiliarAbility = 'cook_speed' | 'chop_speed' | 'carry' | 'eat_leftovers';
+
+export interface SkinDef { id: string; name: string; apronColor: string; }
+
+export const SKIN_POOL: SkinDef[] = [
+  { id: 'default',   name: 'Classic',   apronColor: '#c8402a' },
+  { id: 'royal',     name: 'Royal',     apronColor: '#2060c8' },
+  { id: 'mint',      name: 'Mint',      apronColor: '#2aac6a' },
+  { id: 'gold',      name: 'Gold',      apronColor: '#c8a020' },
+  { id: 'crimson',   name: 'Crimson',   apronColor: '#8a1020' },
+  { id: 'violet',    name: 'Violet',    apronColor: '#7a20c8' },
+  { id: 'teal',      name: 'Teal',      apronColor: '#209898' },
+  { id: 'sunrise',   name: 'Sunrise',   apronColor: '#e07020' },
+  { id: 'rose',      name: 'Rose',      apronColor: '#c83080' },
+  { id: 'onyx',      name: 'Onyx',      apronColor: '#303030' },
+  { id: 'jade',      name: 'Jade',      apronColor: '#20a060' },
+  { id: 'cobalt',    name: 'Cobalt',    apronColor: '#1040a0' },
+  { id: 'ember',     name: 'Ember',     apronColor: '#d05010' },
+  { id: 'lilac',     name: 'Lilac',     apronColor: '#a060c0' },
+  { id: 'sand',      name: 'Sand',      apronColor: '#c09050' },
+  { id: 'midnight',  name: 'Midnight',  apronColor: '#102040' },
+  { id: 'cherry',    name: 'Cherry',    apronColor: '#c02040' },
+  { id: 'sage',      name: 'Sage',      apronColor: '#608060' },
+  { id: 'tangerine', name: 'Tangerine', apronColor: '#e86010' },
+  { id: 'pearl',     name: 'Pearl',     apronColor: '#c8c0a0' },
+];
+
+// Feature unlock thresholds by player level
+export const LEVEL_UNLOCKS: Record<string, number> = {
+  dash:        3,
+  familiar:    5,
+  double_dash: 8,
+  mount:       10,
+  spec_meter:  13,
+  familiar_up: 15,
+  mount_up:    20,
+};
+
+export function hasUnlock(key: string): boolean {
+  return (_profile?.level ?? 0) >= (LEVEL_UNLOCKS[key] ?? 999);
 }
 
 export const LEVEL_THRESHOLDS: number[] = [
@@ -112,18 +159,21 @@ let _pendingXP = 0;
 let _pendingDailyXP = 0;
 let _dirty = false;
 
-type LevelUpCb  = (oldLv: number, newLv: number) => void;
-type UnlockCb   = (id: string, tier: number, name: string) => void;
+type LevelUpCb    = (oldLv: number, newLv: number) => void;
+type UnlockCb     = (id: string, tier: number, name: string) => void;
+type SkinUnlockCb = (skin: SkinDef) => void;
 
-let _onLevelUp:      LevelUpCb | null = null;
-let _onLevelUpEarly: LevelUpCb | null = null;
-let _onUnlock:       UnlockCb  | null = null;
+let _onLevelUp:      LevelUpCb    | null = null;
+let _onLevelUpEarly: LevelUpCb    | null = null;
+let _onUnlock:       UnlockCb     | null = null;
+let _onSkinUnlock:   SkinUnlockCb | null = null;
 // Tracks the highest level we've already notified in-game so we don't double-fire
 let _notifiedLevel = 0;
 
-export function setOnLevelUp(cb: LevelUpCb):        void { _onLevelUp = cb; }
-export function setOnEarlyLevelUp(cb: LevelUpCb):   void { _onLevelUpEarly = cb; }
-export function setOnAchievementUnlocked(cb: UnlockCb): void { _onUnlock = cb; }
+export function setOnLevelUp(cb: LevelUpCb):              void { _onLevelUp = cb; }
+export function setOnEarlyLevelUp(cb: LevelUpCb):         void { _onLevelUpEarly = cb; }
+export function setOnAchievementUnlocked(cb: UnlockCb):   void { _onUnlock = cb; }
+export function setOnSkinUnlock(cb: SkinUnlockCb):        void { _onSkinUnlock = cb; }
 
 // Checks whether pending XP has already crossed a new level threshold and fires
 // the early callback immediately (for in-game toast), without modifying the profile.
@@ -147,16 +197,19 @@ export async function loadProfile(uid: string): Promise<UserProfile> {
   const now = Date.now();
   if (snap.exists()) {
     _profile = snap.data() as UserProfile;
-    _profile.stats        ??= {};
-    _profile.achievements ??= {};
-    _profile.dailyXP      ??= 0;
-    _profile.dailyXPStart ??= now;
+    _profile.stats          ??= {};
+    _profile.achievements   ??= {};
+    _profile.dailyXP        ??= 0;
+    _profile.dailyXPStart   ??= now;
+    _profile.unlockedSkins  ??= ['default'];
+    _profile.activeSkin     ??= 'default';
+    _profile.prestige       ??= 0;
     if (now - _profile.dailyXPStart >= 86_400_000) {
       _profile.dailyXP = 0;
       _profile.dailyXPStart = now;
     }
   } else {
-    _profile = { uid, xp: 0, level: 1, stats: {}, achievements: {}, dailyXP: 0, dailyXPStart: now };
+    _profile = { uid, xp: 0, level: 1, stats: {}, achievements: {}, dailyXP: 0, dailyXPStart: now, unlockedSkins: ['default'], activeSkin: 'default', prestige: 0 };
     await setDoc(r, _profile);
   }
   _pendingXP = 0; _pendingDailyXP = 0; _dirty = false; _notifiedLevel = 0;
@@ -192,6 +245,48 @@ export function clearPendingXP(): void {
   _pendingDailyXP = 0;
   _dirty = false;
   _notifiedLevel = 0;
+}
+
+// ── Profile preferences ───────────────────────────────────────────────────────
+
+export function setGender(g: 'male' | 'female'): void {
+  if (!_profile) return;
+  _profile.gender = g; _dirty = true;
+}
+
+export function setActiveSkin(id: string): void {
+  if (!_profile) return;
+  if (!_profile.unlockedSkins?.includes(id)) return;
+  _profile.activeSkin = id; _dirty = true;
+}
+
+export function setFamiliarAbility(ab: FamiliarAbility): void {
+  if (!_profile) return;
+  _profile.familiarAbility = ab; _dirty = true;
+}
+
+export async function saveProfilePrefs(): Promise<void> {
+  if (!_profile) return;
+  try {
+    await updateDoc(doc(db, 'profiles', _profile.uid), {
+      gender:          _profile.gender ?? null,
+      activeSkin:      _profile.activeSkin ?? 'default',
+      unlockedSkins:   _profile.unlockedSkins ?? ['default'],
+      familiarAbility: _profile.familiarAbility ?? null,
+    });
+  } catch (e) { console.error('[profile] save prefs failed', e); }
+}
+
+export async function resetProfile(): Promise<void> {
+  if (!_profile) return;
+  _profile.xp = 0; _profile.level = 1;
+  _profile.stats = {}; _profile.achievements = {};
+  _profile.dailyXP = 0; _profile.dailyXPStart = Date.now();
+  _profile.prestige = (_profile.prestige ?? 0) + 1;
+  _pendingXP = 0; _pendingDailyXP = 0; _dirty = false; _notifiedLevel = 0;
+  try {
+    await setDoc(doc(db, 'profiles', _profile.uid), _profile);
+  } catch (e) { console.error('[profile] reset failed', e); }
 }
 
 // ── Stats & achievements ──────────────────────────────────────────────────────
@@ -254,8 +349,22 @@ export async function flushSession(): Promise<void> {
       xp: _profile.xp, level: _profile.level,
       stats: _profile.stats, achievements: _profile.achievements,
       dailyXP: _profile.dailyXP, dailyXPStart: _profile.dailyXPStart,
+      unlockedSkins: _profile.unlockedSkins, activeSkin: _profile.activeSkin,
+      gender: _profile.gender ?? null, familiarAbility: _profile.familiarAbility ?? null,
+      prestige: _profile.prestige ?? 0,
     });
-    if (_profile.level > oldLevel) _onLevelUp?.(oldLevel, _profile.level);
+    if (_profile.level > oldLevel) {
+      // Unlock a random skin not yet owned
+      const locked = SKIN_POOL.filter(s => !_profile!.unlockedSkins!.includes(s.id));
+      if (locked.length > 0) {
+        const pick = locked[Math.floor(Math.random() * locked.length)];
+        _profile.unlockedSkins = [..._profile.unlockedSkins!, pick.id];
+        _onSkinUnlock?.(pick);
+        // Persist the new skin immediately (fire and forget)
+        updateDoc(doc(db, 'profiles', _profile.uid), { unlockedSkins: _profile.unlockedSkins }).catch(() => {});
+      }
+      _onLevelUp?.(oldLevel, _profile.level);
+    }
   } catch (e) {
     console.error('[profile] flush failed', e);
   }

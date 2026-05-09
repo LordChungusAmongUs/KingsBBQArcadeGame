@@ -18,10 +18,12 @@ import { initAuth, signInWithGoogle, signOutUser, checkRedirectResult } from './
 import type { User } from 'firebase/auth';
 import {
   loadProfile, clearProfile, flushSession, getProfile,
-  setOnLevelUp, setOnEarlyLevelUp, setOnAchievementUnlocked,
+  setOnLevelUp, setOnEarlyLevelUp, setOnAchievementUnlocked, setOnSkinUnlock,
   incrementStat, recordMaxStat,
   xpProgress, ACHIEVEMENTS, clearPendingXP,
-  type UserProfile,
+  resetProfile, setGender, setActiveSkin, setFamiliarAbility, saveProfilePrefs,
+  LEVEL_UNLOCKS, SKIN_POOL,
+  type UserProfile, type FamiliarAbility, type SkinDef,
 } from './profile';
 import {
   saveCloudScore, loadCloudLeaderboard,
@@ -85,13 +87,10 @@ initAuth(u => {
   if (u) {
     loadProfile(u.uid).then(() => {
       updateAuthUI();
-      // Use localStorage (not sessionStorage) — iOS Safari clears sessionStorage
-      // during cross-origin redirect navigation, losing the pending-lobby flag.
-      // Always clear the pending-lobby flag — player must choose mode from the main menu
       localStorage.removeItem('kbbq_pendingLobby');
+      // Show gender picker for first-time users
+      if (!getProfile()?.gender) showGenderPicker();
       if (lobbyScreen.style.display !== 'none' && !unsubPresence) {
-        // Auth resolved after the user already opened the lobby (race on slow
-        // iOS connections) — re-init now that we have a valid user.
         openLobbyScreen();
       }
     }).catch(console.error);
@@ -153,14 +152,28 @@ setOnEarlyLevelUp((_, newLv) => {
 });
 
 // Fires at session end (flushSession) → update UI with the now-official level
-setOnLevelUp((_, newLv) => {
+setOnLevelUp((oldLv, newLv) => {
   updateAuthUI();
   updateLobbyXPBar();
+  // Show familiar ability picker if this is the first time reaching level 5
+  if (oldLv < 5 && newLv >= 5 && !getProfile()?.familiarAbility) {
+    setTimeout(() => showFamiliarPicker(), 1200);
+  }
 });
 
 setOnAchievementUnlocked((id, tier, name) => {
   const TIER_LABELS = ['I','II','III','IV','V','VI','VII','VIII','IX','X'];
   showToast('ACHIEVEMENT UNLOCKED', `${name} — Tier ${TIER_LABELS[tier] ?? tier + 1}`);
+});
+
+setOnSkinUnlock((skin: SkinDef) => {
+  const toast = document.getElementById('skinUnlockToast')!;
+  const nameEl = document.getElementById('skinUnlockName')!;
+  const swatch = document.getElementById('skinUnlockSwatch')!;
+  nameEl.textContent = skin.name;
+  swatch.style.background = skin.apronColor;
+  toast.style.display = 'block';
+  setTimeout(() => { toast.style.display = 'none'; }, 4000);
 });
 
 // ─── Game state ───────────────────────────────────────────────────────────────
@@ -1023,6 +1036,50 @@ function closeAchievementsOverlay(): void {
 
 document.getElementById('achievementsClose')?.addEventListener('click', closeAchievementsOverlay);
 document.getElementById('lobbyAchievements')?.addEventListener('click', openAchievementsOverlay);
+
+// ── Gender picker ──────────────────────────────────────────────────────────────
+function showGenderPicker(): void {
+  const m = document.getElementById('genderModal')!;
+  m.style.display = 'flex';
+}
+document.getElementById('genderFemale')?.addEventListener('click', () => {
+  setGender('female'); saveProfilePrefs().catch(console.error);
+  document.getElementById('genderModal')!.style.display = 'none';
+});
+document.getElementById('genderMale')?.addEventListener('click', () => {
+  setGender('male'); saveProfilePrefs().catch(console.error);
+  document.getElementById('genderModal')!.style.display = 'none';
+});
+
+// ── Familiar ability picker ────────────────────────────────────────────────────
+function showFamiliarPicker(): void {
+  if (getProfile()?.familiarAbility) return; // already chosen
+  document.getElementById('familiarModal')!.style.display = 'flex';
+}
+document.querySelectorAll('.fam-btn').forEach(btn => {
+  btn.addEventListener('click', e => {
+    const ability = (e.currentTarget as HTMLElement).dataset.ability as FamiliarAbility;
+    setFamiliarAbility(ability); saveProfilePrefs().catch(console.error);
+    document.getElementById('familiarModal')!.style.display = 'none';
+    showToast('FAMILIAR ABILITY SET', ability.replace('_', ' ').toUpperCase());
+  });
+});
+
+// ── Profile reset ──────────────────────────────────────────────────────────────
+document.getElementById('resetProfileBtn')?.addEventListener('click', () => {
+  if (!user) { showToast('SIGN IN REQUIRED', 'Sign in to reset your profile'); return; }
+  document.getElementById('resetModal')!.style.display = 'flex';
+});
+document.getElementById('resetConfirm')?.addEventListener('click', async () => {
+  document.getElementById('resetModal')!.style.display = 'none';
+  await resetProfile();
+  updateAuthUI();
+  updateLobbyXPBar();
+  showToast('PROFILE RESET', 'Level and XP have been wiped');
+});
+document.getElementById('resetCancel')?.addEventListener('click', () => {
+  document.getElementById('resetModal')!.style.display = 'none';
+});
 
 function openLobbyScreen(): void {
   if (gs !== null && screen === 'game') return; // never hijack an active game
