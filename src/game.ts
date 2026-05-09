@@ -172,13 +172,25 @@ function tickFamiliar(gs: GameState, dt: number): void {
 
   if (ability === 'eat_leftovers' || ability === 'all') {
     _famEatTimer += dt;
-    if (_famEatTimer >= 5000) {
+    if (_famEatTimer >= 2000) {
       _famEatTimer = 0;
-      const idx = gs.staged.findIndex(s => s.spoiled);
-      if (idx !== -1) {
-        gs.staged.splice(idx, 1);
-        spawnFloat(_famX, _famY - 20, 'NOM!', '#4f8');
+      let eaten = 0;
+      // eat up to 2 spoiled staged items
+      for (let i = gs.staged.length - 1; i >= 0 && eaten < 2; i--) {
+        if (gs.staged[i].spoiled) { gs.staged.splice(i, 1); eaten++; }
       }
+      // eat burned grill/fryer slots up to the remainder
+      if (eaten < 2) {
+        for (const st of gs.stations) {
+          if (st.kind !== 'grill' && st.kind !== 'fryer') continue;
+          for (const slot of st.slots) {
+            if (slot.state === 'burned' && eaten < 2) {
+              slot.food = null; slot.state = 'empty'; slot.timer = 0; eaten++;
+            }
+          }
+        }
+      }
+      if (eaten > 0) spawnFloat(_famX, _famY - 20, `NOM${eaten > 1 ? ' NOM' : ''}!`, '#4f8');
     }
   }
 
