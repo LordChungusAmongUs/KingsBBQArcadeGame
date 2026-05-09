@@ -161,20 +161,13 @@ function tickFamiliar(gs: GameState, dt: number): void {
   _famX += (targetX - _famX) * spd;
   _famY += (targetY - _famY) * spd;
 
-  if (ability === 'cook_speed' || ability === 'all') {
-    if (input.interactHeld) {
-      const nearby = gs.stations.find(s =>
-        (s.kind === 'grill' || s.kind === 'fryer') &&
-        distToStation(gs.player.x, gs.player.y, s) < INTERACT_RANGE
-      );
-      if (nearby) {
-        let boosted = false;
-        for (const slot of nearby.slots) {
-          if (slot.state === 'cooking') { slot.timer += dt; boosted = true; }
-        }
-        if (boosted && Math.random() < 0.12) spawnFloat(_famX, _famY - 18, '⚡', '#f84');
-      }
-    }
+  // ⚡ visual particles when cook boost is active and familiar is present
+  if ((ability === 'cook_speed' || ability === 'all') && input.interactHeld) {
+    const nearby = gs.stations.find(s =>
+      (s.kind === 'grill' || s.kind === 'fryer') &&
+      distToStation(gs.player.x, gs.player.y, s) < INTERACT_RANGE
+    );
+    if (nearby && Math.random() < 0.12) spawnFloat(_famX, _famY - 18, '⚡', '#f84');
   }
 
   if (ability === 'eat_leftovers' || ability === 'all') {
@@ -190,6 +183,19 @@ function tickFamiliar(gs: GameState, dt: number): void {
   }
 
   // carry ability: no per-frame logic needed — stack limit is raised in doInteract/tickMenu via carryLimit()
+}
+
+// ── Cook boost: hold E near grill/fryer → 2x cook speed (unconditional) ───────
+function tickCookBoost(gs: GameState, dt: number): void {
+  if (!input.interactHeld) return;
+  const nearby = gs.stations.find(s =>
+    (s.kind === 'grill' || s.kind === 'fryer') &&
+    distToStation(gs.player.x, gs.player.y, s) < INTERACT_RANGE
+  );
+  if (!nearby) return;
+  for (const slot of nearby.slots) {
+    if (slot.state === 'cooking') slot.timer += dt;
+  }
 }
 
 // ── Special meter (level 13) ──────────────────────────────────────────────────
@@ -234,6 +240,7 @@ export function tickGame(gs: GameState, dt: number): void {
     tickStaged(gs, dt);
     tickMenu(gs);
     tickFamiliar(gs, dt);
+    tickCookBoost(gs, dt);
     tickPlayer(gs, dt);
     if (gs.coop && gs.player2) tickPlayer2(gs, dt);
     if (gs.player3) tickPlayer3(gs, dt);
@@ -306,6 +313,7 @@ export function tickGame(gs: GameState, dt: number): void {
   }
   tickMenu(gs);
   tickFamiliar(gs, dt);
+  tickCookBoost(gs, dt);
   tickMeter(gs, dt);
   tickPlayer(gs, dt);
   if (gs.coop && gs.player2) tickPlayer2(gs, dt);
