@@ -759,7 +759,7 @@ function drawFamiliar(gs: GameState): void {
 }
 
 function drawPlayerSprite(p: import('./types').Player, apronColor: string, menuOpen = false): void {
-  const jumpOff = p.jumping ? -22 : 0;
+  const jumpOff = p.jumping ? -88 : 0;
   ctx.save();
   ctx.translate(p.x, p.y);
 

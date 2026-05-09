@@ -644,7 +644,7 @@ function tickPlayer(gs: GameState, dt: number): void {
   }
   // Jump (level 10 mount unlock or meter active)
   if (jumpPressed.p1 && (hasUnlock('mount') || gs.meterActive)) {
-    p.jumping = true; p.jumpTimer = 600;
+    p.jumping = true; p.jumpTimer = 300;
   }
   if (p.jumping) {
     p.jumpTimer -= dt;
@@ -705,7 +705,7 @@ function tickPlayer2(gs: GameState, dt: number): void {
   const pk = remoteInput.useRemote ? remoteInput.p2 : { up: keys.has('ArrowUp'), down: keys.has('ArrowDown'), left: keys.has('ArrowLeft'), right: keys.has('ArrowRight') };
   // Jump P2
   if (jumpPressed.p2 && (hasUnlock('mount') || gs.meterActive)) {
-    p.jumping = true; p.jumpTimer = 600;
+    p.jumping = true; p.jumpTimer = 300;
   }
   if (p.jumping) {
     p.jumpTimer -= dt;
@@ -839,7 +839,7 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
   if (!s) {
     // Jump when nothing to interact with (requires mount unlock)
     if ((hasUnlock('mount') || gs.meterActive) && !p.jumping) {
-      p.jumping = true; p.jumpTimer = 600;
+      p.jumping = true; p.jumpTimer = 300;
     }
     return;
   }
