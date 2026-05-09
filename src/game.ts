@@ -59,6 +59,9 @@ function calcOverhead(gs: GameState): number {
 }
 
 const MAX_STACK = 2;
+function carryLimit(gs: GameState, owner: number): number {
+  return (owner === 1 && ((hasUnlock('familiar') && getProfile()?.familiarAbility === 'carry') || gs.meterActive)) ? 3 : MAX_STACK;
+}
 let _orderId = 1;
 
 export function createGame(level: number, carryScore = 0, playerCount = 1, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0): GameState {
@@ -186,18 +189,7 @@ function tickFamiliar(gs: GameState, dt: number): void {
     }
   }
 
-  if (ability === 'carry' || ability === 'all') {
-    // Only swap with familiar when no station is in interact range — prevents E conflict with stations
-    const nearStation = gs.stations.some(s =>
-      Math.hypot(s.x + s.w / 2 - gs.player.x, s.y + s.h / 2 - gs.player.y) < INTERACT_RANGE
-    );
-    if (input.interactPressed && !nearStation) {
-      const tmp = gs.player.held;
-      gs.player.held = gs.player.familiarHeld;
-      gs.player.familiarHeld = tmp;
-      spawnFloat(_famX, _famY - 20, '↔', '#4af');
-    }
-  }
+  // carry ability: no per-frame logic needed — stack limit is raised in doInteract/tickMenu via carryLimit()
 }
 
 // ── Special meter (level 13) ──────────────────────────────────────────────────
@@ -458,7 +450,7 @@ function tickMenu(gs: GameState): void {
         slot.food = null; slot.state = 'empty'; slot.timer = 0;
         if (p.held === null) {
           p.held = { food, count: 1, burned: wasBurned };
-        } else if (!wasBurned && p.held.food === food && !p.held.burned && p.held.count < MAX_STACK) {
+        } else if (!wasBurned && p.held.food === food && !p.held.burned && p.held.count < carryLimit(gs, owner)) {
           p.held.count++;
         } else if (!wasBurned && !p.held.burned) {
           // Swap: return held to an empty slot, then pick up
@@ -492,7 +484,7 @@ function tickMenu(gs: GameState): void {
     const food = menu[idx];
     if (p.held === null) {
       p.held = { food, count: 1, burned: false };
-    } else if (p.held.food === food && !p.held.burned && p.held.count < MAX_STACK) {
+    } else if (p.held.food === food && !p.held.burned && p.held.count < carryLimit(gs, owner)) {
       p.held.count++;
     } else {
       p.held = { food, count: 1, burned: false };
@@ -845,6 +837,7 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
           : playerNum === 3 && gs.player3 ? gs.player3
           : playerNum === 2 && gs.player2 ? gs.player2
           : gs.player;
+  const MS = carryLimit(gs, playerNum);
   const s = nearestStation(p.x, p.y, gs.stations, INTERACT_RANGE);
   if (!s) return;
 
@@ -868,7 +861,7 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
     if (!s.produces) return;
     if (p.held === null) {
       p.held = { food: s.produces, count: 1, burned: false };
-    } else if (p.held.food === s.produces && !p.held.burned && p.held.count < MAX_STACK) {
+    } else if (p.held.food === s.produces && !p.held.burned && p.held.count < MS) {
       p.held.count++;
     } else {
       // Different ingredient, burned item, or plate — swap it out
@@ -894,7 +887,7 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
     // Cheese on ready patties: convert up to (cheese count) ready patties instantly
     if (p.held?.food === 'cheese' && !p.held.burned && s.kind === 'grill') {
       const readyPatties = s.slots.filter(sl => sl.state === 'ready' && sl.food === 'raw_patty');
-      const converts = Math.min(p.held.count, readyPatties.length, MAX_STACK);
+      const converts = Math.min(p.held.count, readyPatties.length, MS);
       if (converts > 0) {
         const cheeseCost = (FOOD.get('cheese')?.cost ?? 0) * converts;
         gs.score -= cheeseCost; gs.levelCOGS += cheeseCost;
@@ -959,9 +952,9 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
       if (cookedId) {
         const heldIsRaw = p.held ? FOOD.get(p.held.food)?.isRaw ?? false : false;
         const canStack = p.held === null ||
-          (isBurned && p.held.burned && p.held.food === cookedId && p.held.count < MAX_STACK) ||
+          (isBurned && p.held.burned && p.held.food === cookedId && p.held.count < MS) ||
           (!p.held.burned && !heldIsRaw && p.held.food === cookedId &&
-           p.held.count < MAX_STACK && !isBurned);
+           p.held.count < MS && !isBurned);
         if (canStack) {
           const result = pickupFromStation(s);
           if (result) {
@@ -992,8 +985,8 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
     if (gs.chopOutput > 0) {
       if (gs.chopOutputSpoiled) {
         if (p.held === null) { p.held = { food: 'pork', count: 1, burned: true }; gs.chopOutput--; }
-        else if (p.held.food === 'pork' && p.held.burned && p.held.count < MAX_STACK) { p.held.count++; gs.chopOutput--; }
-      } else if (p.held === null || (p.held.food === 'pork' && !p.held.burned && p.held.count < MAX_STACK)) {
+        else if (p.held.food === 'pork' && p.held.burned && p.held.count < MS) { p.held.count++; gs.chopOutput--; }
+      } else if (p.held === null || (p.held.food === 'pork' && !p.held.burned && p.held.count < MS)) {
         if (p.held === null) p.held = { food: 'pork', count: 1, burned: false };
         else p.held.count++;
         gs.chopOutput--;
@@ -1022,7 +1015,7 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
     if (p.held.food === PLATE_SENTINEL) return;
     // Stack a spoiled item onto a matching burned held item
     if (p.held.burned) {
-      const spoiledIdx = gs.staged.findIndex(si => si.spoiled && si.food === p.held!.food && p.held!.count < MAX_STACK);
+      const spoiledIdx = gs.staged.findIndex(si => si.spoiled && si.food === p.held!.food && p.held!.count < MS);
       if (spoiledIdx !== -1) {
         gs.staged.splice(spoiledIdx, 1);
         p.held.count++;
