@@ -462,7 +462,7 @@ function hideMobileNameEntry(): void {
 
 // ─── Level management ─────────────────────────────────────────────────────────
 
-function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0): void {
+function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0, carryMeter = 0): void {
   if (n === 1) {
     incrementStat(isCoop ? 'coop_sessions' : 'solo_sessions', 1);
     runSales = 0; runCOGS = 0; runLabor = 0; runWaste = 0; runOverhead = 0; runCompleted = 0; runFailed = 0;
@@ -473,7 +473,7 @@ function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFa
   }
   currentLevel = n; screen = 'game'; isPaused = false; _lastInputTime = Date.now();
   const pCount = isCoop ? lobbyPlayerCount : 1;
-  gs = createGame(n, carryScore, pCount, smokerSlots, carryFailed, thresholdsUnlocked);
+  gs = createGame(n, carryScore, pCount, smokerSlots, carryFailed, thresholdsUnlocked, carryMeter);
   menu.style.display = 'none';
   touchControls.classList.add('game-active');
   lastTime = performance.now();
@@ -935,7 +935,7 @@ function loop(now: number): void {
     }
     if (gs.level < LEVELS.length) {
       const smoker = gs.stations.find(s => s.kind === 'smoker');
-      startLevel(gs.level+1, gs.score, smoker?.slots.map(sl=>({...sl})), Math.max(0,gs.failed-1), gs.thresholdsUnlocked);
+      startLevel(gs.level+1, gs.score, smoker?.slots.map(sl=>({...sl})), Math.max(0,gs.failed-1), gs.thresholdsUnlocked, gs.meter);
       if (isTutorial && gs) {
         gs.tutorialOrderQueue = [];
         gs.levelTimer = 9999999;

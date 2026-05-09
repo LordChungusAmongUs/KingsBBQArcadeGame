@@ -64,7 +64,7 @@ function carryLimit(gs: GameState, owner: number): number {
 }
 let _orderId = 1;
 
-export function createGame(level: number, carryScore = 0, playerCount = 1, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0): GameState {
+export function createGame(level: number, carryScore = 0, playerCount = 1, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0, carryMeter = 0): GameState {
   const lvl = LEVELS[level - 1];
   const coop = playerCount > 1;
   const game: GameState = {
@@ -107,7 +107,7 @@ export function createGame(level: number, carryScore = 0, playerCount = 1, smoke
     tutorialOrderQueue: [],
     levelSatisfactionSum: 0,
     levelSatisfactionCount: 0,
-    meter: 0, meterActive: false, meterTimer: 0,
+    meter: carryMeter, meterActive: false, meterTimer: 0,
   };
   if (smokerSlots) {
     const smoker = game.stations.find(s => s.kind === 'smoker');
@@ -233,6 +233,7 @@ export function tickGame(gs: GameState, dt: number): void {
     tickChop(gs, dt);
     tickStaged(gs, dt);
     tickMenu(gs);
+    tickFamiliar(gs, dt);
     tickPlayer(gs, dt);
     if (gs.coop && gs.player2) tickPlayer2(gs, dt);
     if (gs.player3) tickPlayer3(gs, dt);
@@ -835,7 +836,13 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
           : gs.player;
   const MS = carryLimit(gs, playerNum);
   const s = nearestStation(p.x, p.y, gs.stations, INTERACT_RANGE);
-  if (!s) return;
+  if (!s) {
+    // Jump when nothing to interact with (requires mount unlock)
+    if ((hasUnlock('mount') || gs.meterActive) && !p.jumping) {
+      p.jumping = true; p.jumpTimer = 600;
+    }
+    return;
+  }
 
   // Close this player's menu if they interact with a different station
   if (gs.activeMenu?.owner === playerNum && gs.activeMenu.stationId !== s.id) {
