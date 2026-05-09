@@ -277,7 +277,7 @@ function buildSnapshot(gs: GameState): GameSnapshot {
 }
 
 function restoreP(s: PlayerSnap | null) {
-  return s ? { ...s, held: s.held ?? null, vx: 0, vy: 0, radius: 18 } : null;
+  return s ? { ...s, held: s.held ?? null, vx: 0, vy: 0, radius: 18, familiarHeld: null, jumping: false, jumpTimer: 0 } : null;
 }
 
 function snapshotToGameState(snap: GameSnapshot): GameState {
@@ -310,5 +310,6 @@ function snapshotToGameState(snap: GameSnapshot): GameState {
     tutorialOrderQueue: [],
     levelSatisfactionSum: snap.levelSatisfactionSum ?? 0,
     levelSatisfactionCount: snap.levelSatisfactionCount ?? 0,
+    meter: 0, meterActive: false, meterTimer: 0,
   };
 }
