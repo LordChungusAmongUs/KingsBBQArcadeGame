@@ -3,7 +3,7 @@ import { FOOD, LEVELS, INTERACT_RANGE, PARTIAL_SPOIL_TIME, STAGED_SPOIL_TIME, OV
 import { nearestStation } from './kitchen';
 import { getFloats, tickFloats } from './effects';
 import { xpProgress, getProfile, getTotalXP, getDailyXP, getDailyMultiplier, DAILY_MULT_THRESHOLDS, hasUnlock, SKIN_POOL } from './profile';
-import { getFamiliarPos } from './game';
+import { getFamiliarPos, boostedStationIds } from './game';
 
 // ─── Order name abbreviations ─────────────────────────────────────────────────
 
@@ -292,7 +292,7 @@ function drawCookSlots(s: Station): void {
         ctx.fillText('NEXT', cx, sy + sh - barH - 2);
       } else if (slot.state === 'cooking' && def) {
         const pct = slot.timer / def.cookTime;
-        ctx.fillStyle = '#0a0';
+        ctx.fillStyle = boostedStationIds.has(s.id) ? '#f84' : '#0a0';
         ctx.fillRect(sx + 2, sy + sh - barH - 2, (sw - 4) * pct, barH);
       }
       if (slot.state === 'ready') {

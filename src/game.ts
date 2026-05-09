@@ -198,15 +198,27 @@ function tickFamiliar(gs: GameState, dt: number): void {
 }
 
 // ── Cook boost: hold E near grill/fryer → 2x cook speed (unconditional) ───────
+export const boostedStationIds = new Set<string>();
+let _boostParticleTimer = 0;
+
 function tickCookBoost(gs: GameState, dt: number): void {
-  if (!input.interactHeld) return;
-  const nearby = gs.stations.find(s =>
-    (s.kind === 'grill' || s.kind === 'fryer') &&
-    distToStation(gs.player.x, gs.player.y, s) < INTERACT_RANGE
-  );
-  if (!nearby) return;
-  for (const slot of nearby.slots) {
-    if (slot.state === 'cooking') slot.timer += dt;
+  boostedStationIds.clear();
+  if (!input.interactHeld) { _boostParticleTimer = 0; return; }
+  for (const s of gs.stations) {
+    if (s.kind !== 'grill' && s.kind !== 'fryer') continue;
+    if (distToStation(gs.player.x, gs.player.y, s) >= INTERACT_RANGE) continue;
+    let anyBoosted = false;
+    for (const slot of s.slots) {
+      if (slot.state === 'cooking') { slot.timer += dt; anyBoosted = true; }
+    }
+    if (anyBoosted) boostedStationIds.add(s.id);
+  }
+  if (boostedStationIds.size > 0) {
+    _boostParticleTimer += dt;
+    if (_boostParticleTimer >= 400) {
+      _boostParticleTimer = 0;
+      spawnFloat(gs.player.x, gs.player.y - 30, '⚡2X', '#ff8');
+    }
   }
 }
 
