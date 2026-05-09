@@ -55,7 +55,9 @@ export const LEVEL_UNLOCKS: Record<string, number> = {
 };
 
 export function hasUnlock(key: string): boolean {
-  return (_profile?.level ?? 0) >= (LEVEL_UNLOCKS[key] ?? 999);
+  if (!_profile) return false;
+  const effectiveLevel = computeLevel((_profile.xp ?? 0) + _pendingXP);
+  return effectiveLevel >= (LEVEL_UNLOCKS[key] ?? 999);
 }
 
 export const LEVEL_THRESHOLDS: number[] = [

@@ -172,7 +172,7 @@ function tickFamiliar(gs: GameState, dt: number): void {
         for (const slot of nearby.slots) {
           if (slot.state === 'cooking') { slot.timer += dt; boosted = true; }
         }
-        if (boosted && Math.random() < 0.04) spawnFloat(_famX, _famY - 18, '⚡', '#f84');
+        if (boosted && Math.random() < 0.12) spawnFloat(_famX, _famY - 18, '⚡', '#f84');
       }
     }
   }
