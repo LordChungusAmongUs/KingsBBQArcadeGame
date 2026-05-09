@@ -59,9 +59,26 @@ export function hasUnlock(key: string): boolean {
 }
 
 export const LEVEL_THRESHOLDS: number[] = [
-  0, 500, 1500, 4000, 9000, 19000, 44000, 94000, 194000, 444000,
-  944000, 1944000, 4444000, 9444000, 19444000, 44444000, 94444000,
-  194444000, 444444000, 944444000,
+  0,      // lv1
+  300,    // lv2
+  700,    // lv3  — DASH
+  1300,   // lv4
+  2200,   // lv5  — FAMILIAR
+  3400,   // lv6
+  5000,   // lv7
+  7000,   // lv8  — DOUBLE DASH
+  9500,   // lv9
+  12500,  // lv10 — MOUNT + JUMP
+  17000,  // lv11
+  22000,  // lv12
+  28000,  // lv13 — SPECIAL METER
+  36000,  // lv14
+  46000,  // lv15 — FAMILIAR UPGRADE
+  58000,  // lv16
+  73000,  // lv17
+  91000,  // lv18
+  112000, // lv19
+  137000, // lv20 — MOUNT UPGRADE
 ];
 
 export function computeLevel(xp: number): number {

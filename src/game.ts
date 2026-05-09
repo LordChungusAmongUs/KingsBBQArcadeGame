@@ -165,9 +165,11 @@ function tickFamiliar(gs: GameState, dt: number): void {
         Math.hypot(s.x + s.w / 2 - gs.player.x, s.y + s.h / 2 - gs.player.y) < INTERACT_RANGE * 1.6
       );
       if (nearby) {
+        let boosted = false;
         for (const slot of nearby.slots) {
-          if (slot.state === 'cooking') slot.timer += dt;
+          if (slot.state === 'cooking') { slot.timer += dt; boosted = true; }
         }
+        if (boosted && Math.random() < 0.04) spawnFloat(_famX, _famY - 18, '⚡', '#f84');
       }
     }
   }
@@ -185,11 +187,15 @@ function tickFamiliar(gs: GameState, dt: number): void {
   }
 
   if (ability === 'carry' || ability === 'all') {
-    const famDist = Math.hypot(gs.player.x - _famX, gs.player.y - _famY);
-    if (input.interactPressed && famDist < 55) {
+    // Only swap with familiar when no station is in interact range — prevents E conflict with stations
+    const nearStation = gs.stations.some(s =>
+      Math.hypot(s.x + s.w / 2 - gs.player.x, s.y + s.h / 2 - gs.player.y) < INTERACT_RANGE
+    );
+    if (input.interactPressed && !nearStation) {
       const tmp = gs.player.held;
       gs.player.held = gs.player.familiarHeld;
       gs.player.familiarHeld = tmp;
+      spawnFloat(_famX, _famY - 20, '↔', '#4af');
     }
   }
 }
@@ -915,8 +921,9 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
         }
         if (s.kind === 'fryer') {
           incrementStat('fryer_uses', 1);
-          { const xp = awardXP(1); xpBreakdown.cooking += xp;
-            spawnFloat(p.x, p.y - 30, `+${xp} XP`, '#6af'); }
+          const fryXP = p.held?.food === 'raw_rings' ? 1000 : 1;
+          { const xp = awardXP(fryXP); xpBreakdown.cooking += xp;
+            spawnFloat(p.x, p.y - 30, `+${xp} XP${fryXP === 1000 ? ' 🐶' : ''}`, '#6af'); }
         }
         if (p.held.food === 'raw_pork' && s.kind === 'smoker') {
           { const xp = awardXP(3); xpBreakdown.cooking += xp;
