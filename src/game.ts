@@ -165,7 +165,7 @@ function tickFamiliar(gs: GameState, dt: number): void {
     if (input.interactHeld) {
       const nearby = gs.stations.find(s =>
         (s.kind === 'grill' || s.kind === 'fryer') &&
-        Math.hypot(s.x + s.w / 2 - gs.player.x, s.y + s.h / 2 - gs.player.y) < INTERACT_RANGE * 1.6
+        distToStation(gs.player.x, gs.player.y, s) < INTERACT_RANGE
       );
       if (nearby) {
         let boosted = false;
@@ -662,19 +662,18 @@ function tickPlayer(gs: GameState, dt: number): void {
   }
   const dash = _dash[0];
   let dx = 0, dy = 0, spd: number;
+  const mountMult = (hasUnlock('mount') || gs.meterActive) ? (hasUnlock('mount_up') ? 2.0 : 1.6) : 1.0;
   const held0 = (dash.dx < 0 && lt) || (dash.dx > 0 && rt) || (dash.dy < 0 && up) || (dash.dy > 0 && dn);
   if (dash.remaining > 0 && held0) {
     dx = dash.dx; dy = dash.dy;
-    spd = PLAYER_SPEED * 2 * dt / 1000;
+    spd = PLAYER_SPEED * 2 * mountMult * dt / 1000;
     const prevR = dash.remaining;
     dash.remaining = Math.max(0, dash.remaining - spd);
-    // Notify double-dash system when this dash completes
     if (prevR > 0 && dash.remaining <= 0 && (hasUnlock('double_dash') || gs.meterActive)) {
       notifyDashEnd(0, dash.dx, dash.dy);
     }
   } else {
     if (!held0) dash.remaining = 0;
-    // Moonwalk: both opposing directions held → move in direction of EARLIER-pressed key, face opposite
     const pt = remoteInput.useRemote ? arrowPressTime : wasdPressTime;
     const bothLR = lt && rt, bothUD = up && dn;
     if (bothLR) { dx = pt.right < pt.left ? 1 : -1; }
@@ -682,9 +681,7 @@ function tickPlayer(gs: GameState, dt: number): void {
     if (bothUD) { dy = pt.down < pt.up ? 1 : -1; }
     else        { if (up) dy -= 1; if (dn) dy += 1; }
     if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
-    // Mount speed bonus (level 10)
-    const mountMult = (hasUnlock('mount') || gs.meterActive) ? (hasUnlock('mount_up') ? 2.0 : 1.6) : 1.0;
-    spd = PLAYER_SPEED * dt / 1000 * mountMult;
+    spd = PLAYER_SPEED * mountMult * dt / 1000;
     if (dx !== 0 || dy !== 0) {
       if (bothLR || bothUD) p.facing = Math.atan2(-dy, -dx);
       else p.facing = Math.atan2(dy, dx);
@@ -721,10 +718,11 @@ function tickPlayer2(gs: GameState, dt: number): void {
   }
   const dash = _dash[1];
   let dx = 0, dy = 0, spd: number;
+  const mountMult2 = (hasUnlock('mount') || gs.meterActive) ? (hasUnlock('mount_up') ? 2.0 : 1.6) : 1.0;
   const held1 = (dash.dx < 0 && pk.left) || (dash.dx > 0 && pk.right) || (dash.dy < 0 && pk.up) || (dash.dy > 0 && pk.down);
   if (dash.remaining > 0 && held1) {
     dx = dash.dx; dy = dash.dy;
-    spd = PLAYER_SPEED * 2 * dt / 1000;
+    spd = PLAYER_SPEED * 2 * mountMult2 * dt / 1000;
     const prevR2 = dash.remaining;
     dash.remaining = Math.max(0, dash.remaining - spd);
     if (prevR2 > 0 && dash.remaining <= 0 && (hasUnlock('double_dash') || gs.meterActive)) {
@@ -732,15 +730,13 @@ function tickPlayer2(gs: GameState, dt: number): void {
     }
   } else {
     if (!held1) dash.remaining = 0;
-    // Moonwalk for local P2 (arrow keys) — only when not online
     const bothLR2 = pk.left && pk.right, bothUD2 = pk.up && pk.down;
     if (!remoteInput.useRemote && bothLR2) { dx = arrowPressTime.right < arrowPressTime.left ? 1 : -1; }
     else { if (pk.left) dx -= 1; if (pk.right) dx += 1; }
     if (!remoteInput.useRemote && bothUD2) { dy = arrowPressTime.down < arrowPressTime.up ? 1 : -1; }
     else { if (pk.up) dy -= 1; if (pk.down) dy += 1; }
     if (dx !== 0 && dy !== 0) { dx *= 0.707; dy *= 0.707; }
-    const mountMult2 = (hasUnlock('mount') || gs.meterActive) ? (hasUnlock('mount_up') ? 2.0 : 1.6) : 1.0;
-    spd = PLAYER_SPEED * dt / 1000 * mountMult2;
+    spd = PLAYER_SPEED * mountMult2 * dt / 1000;
     const moonwalking2 = !remoteInput.useRemote && (bothLR2 || bothUD2);
     if (dx !== 0 || dy !== 0) {
       if (moonwalking2) p.facing = Math.atan2(-dy, -dx);
@@ -916,7 +912,7 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
           incrementStat('fryer_uses', 1);
           const fryXP = p.held?.food === 'raw_rings' ? 10000 : 1;
           { const xp = awardXP(fryXP); xpBreakdown.cooking += xp;
-            spawnFloat(p.x, p.y - 30, `+${xp} XP${fryXP === 1000 ? ' 🐶' : ''}`, '#6af'); }
+            spawnFloat(p.x, p.y - 30, `+${xp} XP${fryXP === 10000 ? ' 🐶' : ''}`, '#6af'); }
         }
         if (p.held.food === 'raw_pork' && s.kind === 'smoker') {
           { const xp = awardXP(3); xpBreakdown.cooking += xp;
