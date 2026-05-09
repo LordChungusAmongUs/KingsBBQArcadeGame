@@ -952,9 +952,8 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
         }
         if (s.kind === 'fryer') {
           incrementStat('fryer_uses', 1);
-          const fryXP = p.held?.food === 'raw_rings' ? 10000 : 1;
-          { const xp = awardXP(fryXP); xpBreakdown.cooking += xp;
-            spawnFloat(p.x, p.y - 30, `+${xp} XP${fryXP === 10000 ? ' 🐶' : ''}`, '#6af'); }
+          { const xp = awardXP(1); xpBreakdown.cooking += xp;
+            spawnFloat(p.x, p.y - 30, `+${xp} XP`, '#6af'); }
         }
         if (p.held.food === 'raw_pork' && s.kind === 'smoker') {
           { const xp = awardXP(3); xpBreakdown.cooking += xp;
