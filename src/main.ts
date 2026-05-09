@@ -1651,7 +1651,7 @@ document.getElementById('pgMainMenu')!.addEventListener('click', () => {
   hidePostgameOverlay(); showMenu();
 });
 document.getElementById('pgLobby')!.addEventListener('click', () => {
-  hidePostgameOverlay(); openLobbyScreen();
+  hidePostgameOverlay(); showMenu(); openLobbyScreen();
 });
 document.getElementById('pgPlayAgain')!.addEventListener('click', () => {
   hidePostgameOverlay();

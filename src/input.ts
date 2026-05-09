@@ -53,6 +53,7 @@ export const input = {
 };
 
 let _interactDown = false;
+let _spaceDown = false;
 
 export function initInput(): void {
   window.addEventListener('keydown', e => {
@@ -68,7 +69,7 @@ export function initInput(): void {
     if (e.code === 'KeyD' || e.code === 'ArrowRight') input.menuPickRight = true;
     if (e.code === 'KeyS' || e.code === 'ArrowDown')  input.menuPickDown  = true;
     // P2
-    if (e.code === 'Space') { input.p2InteractPressed = true; input.spacePressed = true; }
+    if (e.code === 'Space') { _spaceDown = true; input.interactPressed = true; input.p2InteractPressed = true; input.spacePressed = true; }
     if (e.code === 'ArrowUp')    input.p2MenuPickUp    = true;
     if (e.code === 'ArrowLeft')  input.p2MenuPickLeft  = true;
     if (e.code === 'ArrowRight') input.p2MenuPickRight = true;
@@ -112,6 +113,7 @@ export function initInput(): void {
   window.addEventListener('keyup', e => {
     keys.delete(e.code);
     if (e.code === 'KeyE')       _interactDown = false;
+    if (e.code === 'Space')      _spaceDown    = false;
     if (e.code === 'ShiftLeft')  _jump1Down    = false;
     if (e.code === 'ShiftRight') _jump2Down    = false;
     const _t = Date.now();
@@ -154,7 +156,7 @@ export function flushFrame(): void {
   input.menuPickLeft    = false;
   input.menuPickRight   = false;
   input.menuPickDown    = false;
-  input.interactHeld    = _interactDown;
+  input.interactHeld    = _interactDown || _spaceDown;
   input.p2InteractPressed = false;
   input.p2MenuPickUp    = false;
   input.p2MenuPickLeft  = false;

@@ -206,7 +206,7 @@ const BOOST_RANGE = INTERACT_RANGE * 2.5;
 function tickCookBoost(gs: GameState, dt: number): void {
   boostedStationIds.clear();
   // Use keys.has for real-time state — interactHeld has a one-frame lag vs tickGame
-  if (!keys.has('KeyE')) { _boostParticleTimer = 0; return; }
+  if (!keys.has('KeyE') && !keys.has('Space')) { _boostParticleTimer = 0; return; }
   for (const s of gs.stations) {
     if (s.kind !== 'grill' && s.kind !== 'fryer') continue;
     if (distToStation(gs.player.x, gs.player.y, s) >= BOOST_RANGE) continue;
