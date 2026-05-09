@@ -1053,7 +1053,7 @@ document.getElementById('genderMale')?.addEventListener('click', () => {
 
 // ── Familiar ability picker ────────────────────────────────────────────────────
 function showFamiliarPicker(): void {
-  if (getProfile()?.familiarAbility) return; // already chosen
+  if (getProfile()?.familiarAbility) return;
   document.getElementById('familiarModal')!.style.display = 'flex';
 }
 document.querySelectorAll('.fam-btn').forEach(btn => {
@@ -1061,20 +1061,85 @@ document.querySelectorAll('.fam-btn').forEach(btn => {
     const ability = (e.currentTarget as HTMLElement).dataset.ability as FamiliarAbility;
     setFamiliarAbility(ability); saveProfilePrefs().catch(console.error);
     document.getElementById('familiarModal')!.style.display = 'none';
-    showToast('FAMILIAR ABILITY SET', ability.replace('_', ' ').toUpperCase());
+    refreshSkillTree();
+    showToast('FAMILIAR ABILITY SET', ability.replace(/_/g, ' ').toUpperCase());
   });
 });
 
+// ── Skill tree ─────────────────────────────────────────────────────────────────
+const UNLOCK_LEVELS: Record<string, number> = { dash: 3, familiar: 5, double_dash: 8, mount: 10, spec_meter: 13, familiar_up: 15, mount_up: 20 };
+
+function refreshSkillTree(): void {
+  const prof = getProfile();
+  const lv = prof?.level ?? 0;
+  const xp = prof?.xp ?? 0;
+  const unlockLevels = Object.values(UNLOCK_LEVELS).sort((a,b)=>a-b);
+  const nextUnlock = unlockLevels.find(n => n > lv);
+
+  const labelEl = document.getElementById('stLevelLabel');
+  if (labelEl) labelEl.textContent = lv > 0
+    ? `Level ${lv}${nextUnlock ? `  —  next unlock at Level ${nextUnlock}` : '  —  all unlocked!'}`
+    : 'Sign in to see your progress';
+
+  // XP progress bar
+  const barWrap = document.getElementById('stXPBarWrap');
+  if (barWrap) {
+    if (lv > 0) {
+      barWrap.style.display = 'block';
+      const prog = xpProgress(xp);
+      const pct = prog.needed > 0 ? Math.min(100, Math.round(prog.current / prog.needed * 100)) : 100;
+      (document.getElementById('stXPBar') as HTMLElement).style.width = pct + '%';
+      (document.getElementById('stXPLabel') as HTMLElement).textContent = `${xp.toLocaleString()} XP  (${prog.current}/${prog.needed} to next)`;
+      (document.getElementById('stXPNext') as HTMLElement).textContent = nextUnlock ? `Unlock at Lv ${nextUnlock}` : 'Max unlocks reached';
+      // Pip markers for each unlock level
+      const pipsEl = document.getElementById('stUnlockPips');
+      if (pipsEl) {
+        pipsEl.innerHTML = unlockLevels.map(ulv => {
+          const done = lv >= ulv;
+          return `<span style="color:${done?'#f84':'#443'};font-weight:bold;">${done?'✓':'○'}Lv${ulv}</span>`;
+        }).join('');
+      }
+    } else {
+      barWrap.style.display = 'none';
+    }
+  }
+
+  Object.entries(UNLOCK_LEVELS).forEach(([key, req]) => {
+    document.getElementById(`stNode-${key}`)?.classList.toggle('unlocked', lv >= req);
+  });
+
+  const famSection = document.getElementById('stFamSection');
+  if (famSection) famSection.style.display = lv >= 5 ? 'flex' : 'none';
+
+  const chosen = prof?.familiarAbility;
+  document.querySelectorAll<HTMLElement>('.st-fam-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.ability === chosen);
+  });
+}
+
+function openSkillTree(): void {
+  refreshSkillTree();
+  document.getElementById('skillTreeModal')!.style.display = 'flex';
+}
+
+document.getElementById('skillTreeBtn')?.addEventListener('click', openSkillTree);
+document.getElementById('stCloseBtn')?.addEventListener('click', () => {
+  document.getElementById('skillTreeModal')!.style.display = 'none';
+});
+
 // ── Profile reset ──────────────────────────────────────────────────────────────
-document.getElementById('resetProfileBtn')?.addEventListener('click', () => {
+async function doResetProfile(): Promise<void> {
   if (!user) { showToast('SIGN IN REQUIRED', 'Sign in to reset your profile'); return; }
   document.getElementById('resetModal')!.style.display = 'flex';
-});
+}
+document.getElementById('stResetBtn')?.addEventListener('click', doResetProfile);
+document.getElementById('resetProfileBtn')?.addEventListener('click', doResetProfile);
 document.getElementById('resetConfirm')?.addEventListener('click', async () => {
   document.getElementById('resetModal')!.style.display = 'none';
   await resetProfile();
   updateAuthUI();
   updateLobbyXPBar();
+  refreshSkillTree();
   showToast('PROFILE RESET', 'Level and XP have been wiped');
 });
 document.getElementById('resetCancel')?.addEventListener('click', () => {

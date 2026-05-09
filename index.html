@@ -57,6 +57,46 @@
     #fsBtn     { border: 2px solid #585; color: #585; font-size: 0.82rem; }
     #fsBtn:hover, #fsBtn:focus        { background: #5853; color: #afa; outline: none; }
     .controls { margin-top: 1.2rem; color: #554; font-size: 0.75rem; letter-spacing: 0.1em; text-align: center; line-height: 2; }
+    #skillTreeBtn { border: 2px solid #a6f; color: #a6f; padding: 0.4rem 1.1rem; background: transparent; font-family: inherit; font-size: 0.75rem; letter-spacing: 0.18em; cursor: pointer; border-radius: 4px; transition: background 0.2s, color 0.2s; }
+    #skillTreeBtn:hover { background: #a6f3; color: #fff; }
+    /* ── Skill tree modal ──────────────────────────────────────────── */
+    #skillTreeModal {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.94); z-index: 2000;
+      flex-direction: column; align-items: center; overflow-y: auto;
+      font-family: 'Courier New', monospace; padding: 28px 14px 36px;
+    }
+    .st-title { color: #f84; font-size: 22px; font-weight: bold; letter-spacing: 3px; margin-bottom: 4px; }
+    .st-subtitle { color: #887; font-size: 12px; margin-bottom: 18px; }
+    .st-nodes { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 8px; }
+    .st-node {
+      display: flex; align-items: flex-start; gap: 14px; padding: 13px 16px;
+      border-radius: 6px; border: 1px solid #333; background: #0f0f0f;
+      opacity: 0.38; transition: opacity 0.2s, border-color 0.2s;
+    }
+    .st-node.unlocked { border-color: #f84; background: #1c0d00; opacity: 1; }
+    .st-badge { font-size: 10px; font-weight: bold; color: #555; min-width: 48px; padding-top: 2px; line-height: 1.4; text-align: center; }
+    .st-node.unlocked .st-badge { color: #f84; }
+    .st-body { flex: 1; }
+    .st-name { font-weight: bold; font-size: 14px; color: #776; }
+    .st-node.unlocked .st-name { color: #ffd; }
+    .st-desc { font-size: 11px; color: #555; margin-top: 3px; line-height: 1.5; }
+    .st-node.unlocked .st-desc { color: #998; }
+    /* Familiar ability sub-picker */
+    #stFamSection { display: none; flex-direction: column; gap: 6px; margin-top: 10px; width: 100%; }
+    #stFamLabel { font-size: 11px; color: #fa4; margin-bottom: 2px; letter-spacing: 0.1em; }
+    .st-fam-btn {
+      font-family: inherit; padding: 9px 12px; background: #111; color: #776;
+      border: 1px solid #333; border-radius: 4px; cursor: pointer; text-align: left;
+      font-size: 12px; transition: border-color 0.15s, background 0.15s, color 0.15s;
+    }
+    .st-fam-btn:hover { border-color: #f84; color: #f84; background: #1c0d00; }
+    .st-fam-btn.active { border-color: #f84; color: #fff; background: #2a1200; }
+    /* Bottom buttons */
+    .st-footer { display: flex; gap: 12px; margin-top: 22px; align-items: center; flex-wrap: wrap; justify-content: center; }
+    .st-close-btn { padding: 10px 28px; border: 2px solid #f84; color: #f84; background: transparent; font-family: inherit; font-size: 13px; letter-spacing: 0.2em; cursor: pointer; border-radius: 4px; }
+    .st-close-btn:hover { background: #f842; color: #fff; }
+    .st-reset-btn { padding: 10px 18px; border: 1px solid #622; color: #f66; background: transparent; font-family: inherit; font-size: 12px; letter-spacing: 0.15em; cursor: pointer; border-radius: 4px; }
+    .st-reset-btn:hover { background: #2a0808; color: #faa; }
 
     /* ── Auth section ──────────────────────────────────────────────── */
     #authSection {
@@ -494,8 +534,93 @@
         <button id="startBtn">ROOKIE</button>
         <button id="lobbyBtn">PRO</button>
       </div>
-      <div style="margin-top:8px;">
-        <button id="resetProfileBtn" style="font-size:11px;padding:4px 12px;background:transparent;border:1px solid #622;color:#f66;font-family:inherit;cursor:pointer;border-radius:3px;">RESET PROFILE</button>
+      <div style="margin-top:10px;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;">
+        <button id="skillTreeBtn">🌟 SKILL TREE</button>
+      </div>
+    </div>
+
+    <!-- ── Skill Tree Modal ───────────────────────────────────────────── -->
+    <div id="skillTreeModal">
+      <div class="st-title">SKILL TREE</div>
+      <div class="st-subtitle" id="stLevelLabel">Sign in to see your progress</div>
+      <div id="stXPBarWrap" style="display:none;width:100%;max-width:500px;margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#665;margin-bottom:4px;">
+          <span id="stXPLabel">0 XP</span><span id="stXPNext"></span>
+        </div>
+        <div style="background:#1a1208;border:1px solid #2a1e10;border-radius:3px;height:10px;overflow:hidden;">
+          <div id="stXPBar" style="height:100%;background:linear-gradient(90deg,#f84,#fa4);width:0%;transition:width 0.3s;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:#443;margin-top:4px;" id="stUnlockPips"></div>
+      </div>
+      <div class="st-nodes">
+
+        <div class="st-node" id="stNode-dash">
+          <div class="st-badge">LVL<br>3</div>
+          <div class="st-body">
+            <div class="st-name">⚡ DASH</div>
+            <div class="st-desc">Double-tap any direction to burst forward</div>
+          </div>
+        </div>
+
+        <div class="st-node" id="stNode-familiar">
+          <div class="st-badge">LVL<br>5</div>
+          <div class="st-body">
+            <div class="st-name">🐾 FAMILIAR</div>
+            <div class="st-desc">Your pet companion follows you and helps in the kitchen</div>
+            <div id="stFamSection">
+              <div id="stFamLabel">— CHOOSE ABILITY —</div>
+              <button class="st-fam-btn fam-btn" data-ability="cook_speed">⚡ 2× COOKING SPEED<br><span style="color:#666;font-size:10px;">Hold E at grill or fryer to speed up cooking</span></button>
+              <button class="st-fam-btn fam-btn" data-ability="chop_speed">🪓 2× CHOPPING SPEED<br><span style="color:#666;font-size:10px;">Pork chops finish in half the time</span></button>
+              <button class="st-fam-btn fam-btn" data-ability="carry">📦 CARRY EXTRA ITEM<br><span style="color:#666;font-size:10px;">Familiar holds 1 item for you — press E near it to swap</span></button>
+              <button class="st-fam-btn fam-btn" data-ability="eat_leftovers">🍖 EAT LEFTOVERS<br><span style="color:#666;font-size:10px;">Auto-clears one spoiled food item every 5 seconds</span></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="st-node" id="stNode-double_dash">
+          <div class="st-badge">LVL<br>8</div>
+          <div class="st-body">
+            <div class="st-name">⚡⚡ DOUBLE DASH</div>
+            <div class="st-desc">After a dash ends, press the same direction again within 400ms to chain a second dash</div>
+          </div>
+        </div>
+
+        <div class="st-node" id="stNode-mount">
+          <div class="st-badge">LVL<br>10</div>
+          <div class="st-body">
+            <div class="st-name">🐴 MOUNT + JUMP</div>
+            <div class="st-desc">Ride your familiar for 1.6× speed. Hold Shift to jump over other players</div>
+          </div>
+        </div>
+
+        <div class="st-node" id="stNode-spec_meter">
+          <div class="st-badge">LVL<br>13</div>
+          <div class="st-body">
+            <div class="st-name">🌀 SPECIAL METER</div>
+            <div class="st-desc">Fills +25 per serve. Press all 4 directions quickly to activate 10s FULL SEND mode — all abilities active at once</div>
+          </div>
+        </div>
+
+        <div class="st-node" id="stNode-familiar_up">
+          <div class="st-badge">LVL<br>15</div>
+          <div class="st-body">
+            <div class="st-name">✨ FAMILIAR UPGRADE</div>
+            <div class="st-desc">Your familiar's ability becomes more powerful</div>
+          </div>
+        </div>
+
+        <div class="st-node" id="stNode-mount_up">
+          <div class="st-badge">LVL<br>20</div>
+          <div class="st-body">
+            <div class="st-name">🚀 MOUNT UPGRADE</div>
+            <div class="st-desc">Mount speed increases from 1.6× to 2.0×</div>
+          </div>
+        </div>
+
+      </div>
+      <div class="st-footer">
+        <button class="st-reset-btn" id="stResetBtn">RESET PROFILE</button>
+        <button class="st-close-btn" id="stCloseBtn">CLOSE</button>
       </div>
     </div>
 
