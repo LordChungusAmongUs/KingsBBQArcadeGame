@@ -82,7 +82,7 @@ const LEVEL_NAMES = [
 ];
 const MAX_ACTIVE = [3, 3, 4, 4, 5, 5, 5, 6, 6, 6];
 
-const ORDER_AVG_MS = [30000, 25000, 20000, 15000, 10000, 7500, 5000, 3000, 2000, 1000];
+const ORDER_AVG_MS = [30000, 20000, 15000, 10000, 7500, 5000, 3000, 2000, 1500, 1000];
 
 export const LEVELS: LevelDef[] = Array.from({ length: 10 }, (_, i) => {
   const base = ORDER_AVG_MS[i];
