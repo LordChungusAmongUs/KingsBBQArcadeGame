@@ -58,7 +58,7 @@ export function loadSprites(): void {
     img.onload = () => { _sprites[key] = img; };
   }
   _eagleImg = new Image();
-  _eagleImg.src = '/images/eagle familiar.png';
+  _eagleImg.src = '/images/eagle%20familiar.png';
 }
 
 export function initRenderer(canvas: HTMLCanvasElement): void {
@@ -734,7 +734,8 @@ function drawFamiliar(gs: GameState): void {
     const col = Math.floor(Date.now() / 250) % 2;
     const dirRowMap: Record<string, number> = { up: 0, down: 1, left: 2, right: 3 };
     const row = dirRowMap[facingDir(gs.player.facing)] ?? 1;
-    const drawW = 44, drawH = 44;
+    // Each frame is 768×256 (3:1). Display at 72×48 so eagle content reads clearly.
+    const drawW = 72, drawH = 48;
 
     if (gs.meterActive) { ctx.shadowColor = '#ff8'; ctx.shadowBlur = 14; }
     ctx.drawImage(_eagleImg, col * fw, row * fh, fw, fh, x - drawW / 2, y - drawH / 2 + bob, drawW, drawH);
@@ -760,10 +761,10 @@ function drawFamiliar(gs: GameState): void {
   if (showCarryItem) {
     const fhDef = FOOD.get(gs.player.held!.food);
     ctx.fillStyle = fhDef?.color ?? '#aaa';
-    ctx.beginPath(); ctx.arc(x + 18, y + bob - 10, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 36, y + bob - 8, 8, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.fillStyle = '#222'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('1', x + 18, y + bob - 7);
+    ctx.fillText('1', x + 36, y + bob - 5);
   }
 
   ctx.restore();
