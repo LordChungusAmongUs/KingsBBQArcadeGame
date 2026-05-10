@@ -209,7 +209,7 @@ let _pendingDailyXP = 0;
 let _dirty = false;
 
 type LevelUpCb    = (oldLv: number, newLv: number) => void;
-type UnlockCb     = (id: string, tier: number, name: string) => void;
+type UnlockCb     = (id: string, tier: number, name: string, xp: number) => void;
 type SkinUnlockCb = (skin: SkinDef) => void;
 
 let _onLevelUp:      LevelUpCb    | null = null;
@@ -374,8 +374,9 @@ function _checkAchievements(key: string, oldVal: number, newVal: number): void {
     for (let t = cur + 1; t < ach.tiers.length; t++) {
       if (newVal >= ach.tiers[t]) {
         _profile.achievements[ach.id] = t;
-        _pendingXP += ach.xpPerTier[t] ?? 0;
-        _onUnlock?.(ach.id, t, ach.name);
+        const _achXP = ach.xpPerTier[t] ?? 0;
+        _pendingXP += _achXP;
+        _onUnlock?.(ach.id, t, ach.name, _achXP);
       } else {
         break;
       }

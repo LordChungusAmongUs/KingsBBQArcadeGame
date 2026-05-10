@@ -183,9 +183,10 @@ setOnLevelUp(() => {
   updateLobbyXPBar();
 });
 
-setOnAchievementUnlocked((id, tier, name) => {
+setOnAchievementUnlocked((id, tier, name, xp) => {
   const TIER_LABELS = ['I','II','III','IV','V','VI','VII','VIII','IX','X'];
   showToast('ACHIEVEMENT UNLOCKED', `${name} — Tier ${TIER_LABELS[tier] ?? tier + 1}`);
+  if (xp > 0 && gs?.player) spawnFloat(gs.player.x, gs.player.y - 60, `+${xp} XP`, '#fa4', 2200);
 });
 
 setOnSkinUnlock((skin: SkinDef) => {
