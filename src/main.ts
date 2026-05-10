@@ -1,11 +1,35 @@
 import { initAudio, playMusic, playPlaylist, stopMusic } from './audio';
 
-// ── In-game soundtrack playlist (drop files in public/audio/) ──────────────
+// ── Soundtrack playlists ────────────────────────────────────────────────────
 const GAME_TRACKS = [
-  '/audio/game1.mp3',
-  '/audio/game2.mp3',
-  '/audio/game3.mp3',
-  '/audio/game4.mp3',
+  '/audio/game%20play.mp3',
+  '/audio/gameplay%202.mp3',
+  '/audio/gameplay%203.mp3',
+  '/audio/gameplay%204.mp3',
+  '/audio/gameplay%205.mp3',
+  '/audio/gameplay%206.mp3',
+  '/audio/gameplay%207.mp3',
+  '/audio/gameplay%208.mp3',
+];
+const LOBBY_TRACKS = [
+  '/audio/Lobby.mp3',
+  '/audio/lobby%202.mp3',
+  '/audio/lobby%203.mp3',
+  '/audio/lobby%204.mp3',
+  '/audio/lobby%205.mp3',
+  '/audio/lobby%206.mp3',
+  '/audio/lobby%207.mp3',
+  '/audio/lobby%208.mp3',
+];
+const AFTER_GAME_TRACKS = [
+  '/audio/after%20game%20menu.mp3',
+  '/audio/after%20game%20menu%202.mp3',
+  '/audio/after%20game%20menu%203.mp3',
+  '/audio/after%20game%20menu%204.mp3',
+];
+const TUTORIAL_TRACKS = [
+  '/audio/Tutorial.mp3',
+  '/audio/Tutorial%202.mp3',
 ];
 import { initInput, flushFrame, input, virtualKeyDown, virtualKeyUp, keys } from './input';
 import { spawnFloat, resetXPBreakdown, xpBreakdown, xpBreakdownTotal } from './effects';
@@ -282,7 +306,7 @@ function showMenu(): void {
   updateMenuLeaderboard();
   setTimeout(() => focusMenuBtn(0), 0);
   enterFullscreenLandscape();
-  playMusic('/audio/theme.mp3');
+  playMusic('/audio/Main%20Theme.mp3');
 }
 
 function recordLevelStats(g: GameState): void {
@@ -380,6 +404,7 @@ function goToNameEntry(g: GameState): void {
 
 function goToGameReport(g: GameState): void {
   preparePostGame(g);
+  playPlaylist(AFTER_GAME_TRACKS);
   screen = 'game_report';
 }
 
@@ -405,7 +430,7 @@ function enterLeaderboard(): void {
   if (leaderboardReturn !== 'menu') return;
   const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   if (isTouch) document.getElementById('lbTapHint')!.style.display = 'flex';
-  playMusic('/audio/score.mp3');
+  playMusic('/audio/Score%20Screen.mp3');
 }
 
 function dismissLeaderboard(): void {
@@ -1172,6 +1197,7 @@ function openLobbyScreen(): void {
   unsubPresence   = watchPresence(users => { onlineUsers = users; renderOnlineUsers(); });
   unsubGlobalChat = watchGlobalChat(renderGlobalChat);
   unsubInvites    = watchIncomingInvites(user.uid, handleIncomingInvites);
+  playPlaylist(LOBBY_TRACKS);
   // Auto-focus first button so arrow keys work immediately without clicking first
   requestAnimationFrame(() => focusFirstLobbyBtn());
 }
@@ -1669,6 +1695,7 @@ document.getElementById('pgPlayAgain')!.addEventListener('click', () => {
 document.getElementById('tutorialBtn')!.addEventListener('click', () => {
   isCoop = false; isTutorial = true; tutorialStep = 0; tutorialHintTimer = 0;
   tutorialPlayerMoved = false; tutorialBaseCompleted = 0; tutorialModalActive = false;
+  playPlaylist(TUTORIAL_TRACKS);
   startLevel(1, STARTING_MONEY);
   if (gs) { gs.tutorialOrderQueue = []; gs.levelTimer = 9999999; TUTORIAL_STEPS[0]?.onEnter?.(gs); }
   // Pre-render one frame so the canvas isn't black on first-ever load when a modal appears
@@ -1716,7 +1743,7 @@ splashEl.addEventListener('click', dismissSplash);
 // Use touchend + preventDefault to avoid tap-through onto menu buttons below
 splashEl.addEventListener('touchend', (e) => { e.preventDefault(); dismissSplash(); });
 
-playMusic('/audio/theme.mp3');
+playMusic('/audio/Main%20Theme.mp3');
 
 window.addEventListener('beforeunload', () => {
   if (user) clearPresence(user.uid);
