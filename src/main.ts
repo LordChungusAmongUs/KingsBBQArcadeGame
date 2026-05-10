@@ -227,6 +227,7 @@ let nameChars = ['A','A','A'], nameCursor = 0;
 let leaderboardEntries: LeaderboardEntry[] = [];
 let lastGameWasCoop = false;
 let lastGameWasOnline = false;
+let lastGameWasTutorial = false;
 let lastGameScore = 0, lastGameLevel = 1;
 let runSales = 0, runCOGS = 0, runLabor = 0, runWaste = 0, runOverhead = 0, runCompleted = 0, runFailed = 0;
 let runSatisfactionSum = 0, runSatisfactionCount = 0;
@@ -299,13 +300,15 @@ function enterFullscreenLandscape(): void {
 function refreshMenuButtons(): void {
   const tutDone  = isTutorialCompleted();
   const lvl      = getProfile()?.level ?? 1;
+  const inParty  = !!partyLobbyId && !!partyLatestData?.guestUid;
   const startBtn = document.getElementById('startBtn') as HTMLButtonElement;
   const lobbyBtn = document.getElementById('lobbyBtn') as HTMLButtonElement;
   const lockMsg  = document.getElementById('btnLockMsg');
-  startBtn.disabled = !tutDone;
+  startBtn.disabled = !tutDone || inParty;
   lobbyBtn.disabled = !tutDone || lvl < 3;
   if (lockMsg) {
     if (!tutDone)       lockMsg.textContent = 'Complete TRAINING to unlock ROOKIE & PRO';
+    else if (inParty)   lockMsg.textContent = 'Leave the party to play ROOKIE';
     else if (lvl < 3)   lockMsg.textContent = 'Reach Level 3 to unlock PRO';
     else                lockMsg.textContent = '';
   }
@@ -410,7 +413,8 @@ function preparePostGame(g: GameState): void {
   }
 }
 
-function goToNameEntry(g: GameState): void {
+function goToNameEntry(g: GameState, wasTutorial = false): void {
+  lastGameWasTutorial = wasTutorial;
   preparePostGame(g);
   showMobileNameEntry();
   screen = 'name_entry';
@@ -461,15 +465,25 @@ function showPostgameOverlay(): void {
   const sign = lastGameScore < 0 ? '-' : '';
   document.getElementById('pgScoreDisplay')!.textContent =
     `SCORE: ${sign}$${(Math.abs(lastGameScore)/100).toFixed(2)}  ·  STAGE ${lastGameLevel}`;
-  const btn = document.getElementById('pgPlayAgain')!;
-  if (lastGameWasCoop && lastGameWasOnline) {
-    btn.textContent = 'PLAY CO-OP AGAIN';
+  const pgPlayAgain = document.getElementById('pgPlayAgain')!;
+  const pgLobby     = document.getElementById('pgLobby')!;
+  // Set button labels and visibility per game type
+  if (lastGameWasTutorial) {
+    pgPlayAgain.textContent    = 'RE-TRAIN';
+    pgLobby.style.display      = 'none';
+  } else if (!lastGameWasPro) {
+    pgPlayAgain.textContent    = 'PLAY AGAIN  ·  ROOKIE';
+    pgLobby.style.display      = 'none';
+  } else if (lastGameWasCoop && lastGameWasOnline) {
+    pgPlayAgain.textContent    = 'PLAY AGAIN  ·  CO-OP MATCHMAKING';
+    pgLobby.style.display      = '';
   } else if (lastGameWasCoop) {
-    btn.textContent = 'PLAY LOCAL CO-OP AGAIN';
+    pgPlayAgain.textContent    = 'PLAY AGAIN  ·  LOCAL CO-OP';
+    pgLobby.style.display      = '';
   } else {
-    btn.textContent = 'PLAY SOLO AGAIN';
+    pgPlayAgain.textContent    = 'PLAY AGAIN  ·  SOLO';
+    pgLobby.style.display      = '';
   }
-  document.getElementById('pgLobby')!.style.display = lastGameWasPro ? '' : 'none';
   pgFocusIdx = 0;
   document.getElementById('postgameOverlay')!.style.display = 'flex';
   screen = 'game';
@@ -969,9 +983,10 @@ function loop(now: number): void {
     runCompleted += gs.completed; runFailed += gs.failed;
     runSatisfactionSum += gs.levelSatisfactionSum; runSatisfactionCount += gs.levelSatisfactionCount;
     if (isTutorial && gs.level === 2) {
-      isTutorial = false; tutorialStep = 0; tutorialModalActive = false;
       markTutorialComplete();
-      goToNameEntry(gs); requestAnimationFrame(loop); return;
+      goToNameEntry(gs, true);   // wasTutorial=true captured before clearing flags
+      isTutorial = false; tutorialStep = 0; tutorialModalActive = false;
+      requestAnimationFrame(loop); return;
     }
     // Check for level-up reward before advancing to next stage
     const _projLv = getProjectedLevel();
@@ -1757,6 +1772,10 @@ document.getElementById('globalChatInput')!.addEventListener('keydown', e => {
   if (e.key === 'Enter') handleGlobalSend();
 });
 document.getElementById('lobbyPlaySolo')!.addEventListener('click', () => {
+  if (partyLobbyId && partyLatestData?.guestUid) {
+    showToast('IN A PARTY', 'Leave the party before playing solo');
+    return;
+  }
   closeLobbyScreen(); isCoop = false; lobbyPlayerCount = 1; isProMode = true; startLevel(1, STARTING_MONEY);
   if (gs) render(gs); flushFrame();
 });
@@ -1820,10 +1839,30 @@ document.getElementById('pgLobby')!.addEventListener('click', () => {
 });
 document.getElementById('pgPlayAgain')!.addEventListener('click', () => {
   hidePostgameOverlay();
-  if (lastGameWasCoop && lastGameWasOnline) {
-    openLobbyScreen();
+  if (lastGameWasTutorial) {
+    // RE-TRAIN — restart tutorial
+    isCoop = false; isTutorial = true; tutorialStep = 0; tutorialHintTimer = 0;
+    tutorialPlayerMoved = false; tutorialBaseCompleted = 0; tutorialModalActive = false;
+    playPlaylist(TUTORIAL_TRACKS);
+    startLevel(1, STARTING_MONEY);
+    if (gs) { gs.tutorialOrderQueue = []; gs.levelTimer = 9999999; TUTORIAL_STEPS[0]?.onEnter?.(gs); }
+    if (gs) render(gs); flushFrame();
+  } else if (lastGameWasCoop && lastGameWasOnline) {
+    // Co-op matchmaking — return to lobby to re-queue
+    showMenu(); openLobbyScreen();
+  } else if (lastGameWasCoop) {
+    // Local co-op — restart with same player count
+    isCoop = true; isProMode = lastGameWasPro;
+    startLevel(1, STARTING_MONEY + 2500 * (lobbyPlayerCount - 1));
+    if (gs) render(gs); flushFrame();
+  } else if (lastGameWasPro) {
+    // Solo PRO — restart solo pro run
+    isCoop = false; isProMode = true;
+    startLevel(1, STARTING_MONEY);
+    if (gs) render(gs); flushFrame();
   } else {
-    isCoop = lastGameWasCoop;
+    // ROOKIE — restart rookie run
+    isCoop = false; isTutorial = false; isProMode = false;
     startLevel(1, STARTING_MONEY);
     if (gs) render(gs); flushFrame();
   }
