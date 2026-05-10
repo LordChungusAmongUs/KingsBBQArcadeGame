@@ -44,6 +44,7 @@ export function updateHUDRunStats(sales: number, cogs: number, labor: number, wa
 // ─── Sprite cache ─────────────────────────────────────────────────────────────
 
 const _sprites: Partial<Record<string, HTMLImageElement>> = {};
+let _eagleImg: HTMLImageElement | null = null;
 
 export function loadSprites(): void {
   const keys = [
@@ -56,6 +57,8 @@ export function loadSprites(): void {
     img.src = `/images/${key}.png`;
     img.onload = () => { _sprites[key] = img; };
   }
+  _eagleImg = new Image();
+  _eagleImg.src = '/images/eagle familiar.png';
 }
 
 export function initRenderer(canvas: HTMLCanvasElement): void {
@@ -718,44 +721,51 @@ function drawPlayer(gs: GameState): void {
 function drawFamiliar(gs: GameState): void {
   const { x, y } = getFamiliarPos();
   const bob = Math.sin(Date.now() / 300) * 3;
-  const ability = getProfile()?.familiarAbility;
-  const aColor = ability === 'cook_speed' ? '#f84' :
-                 ability === 'chop_speed' ? '#8f4' :
-                 ability === 'carry'       ? '#4af' :
-                 ability === 'eat_leftovers' ? '#fa4' : '#f8f';
-  const color = gs.meterActive ? '#ff8' : aColor;
 
   ctx.save();
+
+  // Shadow
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.beginPath(); ctx.ellipse(x, y + 12, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
-  // Body
-  ctx.fillStyle = color;
-  ctx.beginPath(); ctx.ellipse(x, y + bob, 10, 9, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#fff4'; ctx.lineWidth = 1.5; ctx.stroke();
-  // Ears
-  ctx.fillStyle = color;
-  ctx.beginPath(); ctx.ellipse(x - 7, y + bob - 10, 3, 5, -0.3, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(x + 7, y + bob - 10, 3, 5, 0.3, 0, Math.PI * 2); ctx.fill();
-  // Eyes
-  const ef = gs.player.facing;
-  const ex = Math.cos(ef) * 4, ey = Math.sin(ef) * 4;
-  ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.arc(x + ex - Math.sin(ef) * 3, y + bob + ey + Math.cos(ef) * 3, 2.5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + ex + Math.sin(ef) * 3, y + bob + ey - Math.cos(ef) * 3, 2.5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#222';
-  ctx.beginPath(); ctx.arc(x + ex - Math.sin(ef) * 3 + Math.cos(ef) * 0.5, y + bob + ey + Math.cos(ef) * 3 + Math.sin(ef) * 0.5, 1.5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + ex + Math.sin(ef) * 3 + Math.cos(ef) * 0.5, y + bob + ey - Math.cos(ef) * 3 + Math.sin(ef) * 0.5, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(x, y + 16, 11, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+  if (_eagleImg?.complete && _eagleImg.naturalWidth > 0) {
+    const fw = _eagleImg.naturalWidth / 2;   // frame width  (col 0=wings up, col 1=wings down)
+    const fh = _eagleImg.naturalHeight / 4;  // frame height (row 0=up, 1=down, 2=left, 3=right)
+    const col = Math.floor(Date.now() / 250) % 2;
+    const dirRowMap: Record<string, number> = { up: 0, down: 1, left: 2, right: 3 };
+    const row = dirRowMap[facingDir(gs.player.facing)] ?? 1;
+    const drawW = 44, drawH = 44;
+
+    if (gs.meterActive) { ctx.shadowColor = '#ff8'; ctx.shadowBlur = 14; }
+    ctx.drawImage(_eagleImg, col * fw, row * fh, fw, fh, x - drawW / 2, y - drawH / 2 + bob, drawW, drawH);
+    ctx.shadowBlur = 0;
+  } else {
+    // Fallback procedural drawing while sprite loads
+    const ability = getProfile()?.familiarAbility;
+    const aColor = ability === 'cook_speed' ? '#f84' :
+                   ability === 'chop_speed' ? '#8f4' :
+                   ability === 'carry'       ? '#4af' :
+                   ability === 'eat_leftovers' ? '#fa4' : '#f8f';
+    const color = gs.meterActive ? '#ff8' : aColor;
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.ellipse(x, y + bob, 10, 9, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#fff4'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x - 7, y + bob - 10, 3, 5, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + 7, y + bob - 10, 3, 5, 0.3, 0, Math.PI * 2); ctx.fill();
+  }
+
   // Show 3rd item on familiar when carry ability lets player hold 3
   const carryOn = (hasUnlock('familiar') && getProfile()?.familiarAbility === 'carry') || gs.meterActive;
   const showCarryItem = carryOn && gs.player.held && gs.player.held.count >= 3 && !gs.player.held.burned;
   if (showCarryItem) {
     const fhDef = FOOD.get(gs.player.held!.food);
     ctx.fillStyle = fhDef?.color ?? '#aaa';
-    ctx.beginPath(); ctx.arc(x + 14, y + bob - 8, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 18, y + bob - 10, 8, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.fillStyle = '#222'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('1', x + 14, y + bob - 5);
+    ctx.fillText('1', x + 18, y + bob - 7);
   }
+
   ctx.restore();
 }
 
