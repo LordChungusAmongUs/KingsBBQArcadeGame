@@ -47,6 +47,7 @@ import {
   xpProgress, ACHIEVEMENTS, clearPendingXP,
   resetProfile, setGender, setActiveSkin, setFamiliarAbility, saveProfilePrefs,
   LEVEL_UNLOCKS, SKIN_POOL,
+  getClaimedLevel, getProjectedLevel, claimLevelUp,
   type UserProfile, type FamiliarAbility, type SkinDef,
 } from './profile';
 import {
@@ -176,13 +177,9 @@ setOnEarlyLevelUp((_, newLv) => {
 });
 
 // Fires at session end (flushSession) → update UI with the now-official level
-setOnLevelUp((oldLv, newLv) => {
+setOnLevelUp(() => {
   updateAuthUI();
   updateLobbyXPBar();
-  // Show familiar ability picker if this is the first time reaching level 5
-  if (oldLv < 5 && newLv >= 5 && !getProfile()?.familiarAbility) {
-    setTimeout(() => showFamiliarPicker(), 1200);
-  }
 });
 
 setOnAchievementUnlocked((id, tier, name) => {
@@ -958,6 +955,25 @@ function loop(now: number): void {
       isTutorial = false; tutorialStep = 0; tutorialModalActive = false;
       goToNameEntry(gs); requestAnimationFrame(loop); return;
     }
+    // Check for level-up reward before advancing to next stage
+    const _projLv = getProjectedLevel();
+    const _claimedLv = getClaimedLevel();
+    if (!isTutorial && _projLv > _claimedLv) {
+      const _snapGsLevel = gs.level;
+      const _snapScore   = gs.score;
+      const _snapSmoker  = gs.stations.find(s => s.kind === 'smoker');
+      const _snapFailed  = gs.failed;
+      const _snapThresh  = gs.thresholdsUnlocked;
+      const _snapMeter   = gs.meter;
+      showLevelRewardModal(_claimedLv, _projLv, () => {
+        if (_snapGsLevel < LEVELS.length) {
+          startLevel(_snapGsLevel + 1, _snapScore, _snapSmoker?.slots.map(sl => ({ ...sl })), Math.max(0, _snapFailed - 1), _snapThresh, _snapMeter);
+        } else {
+          goToNameEntry(gs!); requestAnimationFrame(loop);
+        }
+      });
+      return;
+    }
     if (gs.level < LEVELS.length) {
       const smoker = gs.stations.find(s => s.kind === 'smoker');
       startLevel(gs.level+1, gs.score, smoker?.slots.map(sl=>({...sl})), Math.max(0,gs.failed-1), gs.thresholdsUnlocked, gs.meter);
@@ -1077,6 +1093,110 @@ document.getElementById('genderMale')?.addEventListener('click', () => {
 });
 
 // ── Familiar ability picker ────────────────────────────────────────────────────
+// ── Stage level-up reward modal ────────────────────────────────────────────────
+
+const UNLOCK_DESCS: Record<string, { icon: string; label: string; desc: string }> = {
+  dash:        { icon: '💨', label: 'DASH UNLOCKED',         desc: 'Double-tap any direction to dash!' },
+  double_dash: { icon: '⚡', label: 'DOUBLE DASH UNLOCKED',  desc: 'Chain two dashes in the same direction!' },
+  mount:       { icon: '🐎', label: 'MOUNT UNLOCKED',        desc: 'Ride for a 60% movement speed boost!' },
+  mount_up:    { icon: '🚀', label: 'TURBO MOUNT',           desc: 'Mount speed bonus upgraded to 2×!' },
+  familiar:    { icon: '🐾', label: 'FAMILIAR UNLOCKED',     desc: 'A companion joins you — choose its ability below.' },
+  familiar_up: { icon: '✨', label: 'FAMILIAR EVOLVED',      desc: 'Your familiar is stronger — re-choose its ability.' },
+  spec_meter:  { icon: '🌀', label: 'SPECIAL METER',         desc: 'Fill the meter then spin WASD for a 10s power surge!' },
+};
+
+let _proceedAfterReward: (() => void) | null = null;
+let _luNeedsFamChoice = false;
+
+function showLevelRewardModal(oldLv: number, newLv: number, proceed: () => void): void {
+  _proceedAfterReward = proceed;
+  _luNeedsFamChoice = false;
+
+  const newUnlocks = Object.entries(LEVEL_UNLOCKS)
+    .filter(([, lv]) => lv > oldLv && lv <= newLv)
+    .sort(([, a], [, b]) => a - b)
+    .map(([key]) => key);
+
+  document.getElementById('luLevelText')!.textContent = `Level ${oldLv} → ${newLv}`;
+
+  const list = document.getElementById('luUnlockList')!;
+  list.innerHTML = newUnlocks
+    .filter(k => k !== 'familiar' && k !== 'familiar_up')
+    .map(k => {
+      const d = UNLOCK_DESCS[k];
+      if (!d) return '';
+      return `<div style="background:#1a1000;border:1px solid #553;border-radius:5px;padding:12px 16px;color:#ff8;font-size:14px;">`
+           + `<span style="font-size:20px;">${d.icon}</span> <strong>${d.label}</strong><br>`
+           + `<span style="color:#aaa;font-size:12px;">${d.desc}</span></div>`;
+    }).join('');
+
+  const famUnlocked = newUnlocks.includes('familiar') || newUnlocks.includes('familiar_up');
+  const famSection = document.getElementById('luFamSection')!;
+  if (famUnlocked) {
+    famSection.style.display = 'flex';
+    _luNeedsFamChoice = true;
+    // Pre-select current ability if already chosen
+    const current = getProfile()?.familiarAbility;
+    document.querySelectorAll<HTMLElement>('.lu-fam-btn').forEach(b => {
+      b.style.border = b.dataset.ability === current ? '2px solid #f84' : '2px solid #444';
+    });
+    if (current) _luNeedsFamChoice = false;
+  } else {
+    famSection.style.display = 'none';
+  }
+
+  // Add familiar/familiar_up card to list too (as info card)
+  newUnlocks.filter(k => k === 'familiar' || k === 'familiar_up').forEach(k => {
+    const d = UNLOCK_DESCS[k];
+    if (!d) return;
+    list.insertAdjacentHTML('afterbegin',
+      `<div style="background:#1a0800;border:1px solid #f84;border-radius:5px;padding:12px 16px;color:#f84;font-size:14px;">`
+    + `<span style="font-size:20px;">${d.icon}</span> <strong>${d.label}</strong><br>`
+    + `<span style="color:#aaa;font-size:12px;">${d.desc}</span></div>`);
+  });
+
+  _updateLuConfirm();
+  document.getElementById('levelUpModal')!.style.display = 'flex';
+}
+
+function _updateLuConfirm(): void {
+  const btn = document.getElementById('luConfirm') as HTMLButtonElement;
+  const hint = document.getElementById('luConfirmHint')!;
+  if (_luNeedsFamChoice) {
+    btn.disabled = true;
+    btn.style.color = '#888'; btn.style.borderColor = '#444'; btn.style.cursor = 'not-allowed';
+    hint.style.display = 'block';
+  } else {
+    btn.disabled = false;
+    btn.style.color = '#ff8'; btn.style.borderColor = '#f84'; btn.style.cursor = 'pointer';
+    hint.style.display = 'none';
+  }
+}
+
+document.querySelectorAll<HTMLElement>('.lu-fam-btn').forEach(btn => {
+  btn.addEventListener('click', e => {
+    const ability = (e.currentTarget as HTMLElement).dataset.ability as FamiliarAbility;
+    setFamiliarAbility(ability);
+    document.querySelectorAll<HTMLElement>('.lu-fam-btn').forEach(b => {
+      b.style.border = b.dataset.ability === ability ? '2px solid #f84' : '2px solid #444';
+    });
+    _luNeedsFamChoice = false;
+    _updateLuConfirm();
+  });
+});
+
+document.getElementById('luConfirm')!.addEventListener('click', () => {
+  if (_luNeedsFamChoice) return;
+  const newLv = getProjectedLevel();
+  claimLevelUp(newLv);
+  saveProfilePrefs().catch(console.error);
+  document.getElementById('levelUpModal')!.style.display = 'none';
+  refreshSkillTree();
+  const proceed = _proceedAfterReward;
+  _proceedAfterReward = null;
+  proceed?.();
+});
+
 function showFamiliarPicker(): void {
   if (getProfile()?.familiarAbility) return;
   document.getElementById('familiarModal')!.style.display = 'flex';

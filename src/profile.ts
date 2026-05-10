@@ -14,6 +14,7 @@ export interface UserProfile {
   unlockedSkins?: string[];
   familiarAbility?: FamiliarAbility;
   prestige?: number;
+  claimedLevel?: number;
 }
 
 export type FamiliarAbility = 'cook_speed' | 'chop_speed' | 'carry' | 'eat_leftovers';
@@ -56,31 +57,46 @@ export const LEVEL_UNLOCKS: Record<string, number> = {
 
 export function hasUnlock(key: string): boolean {
   if (!_profile) return false;
-  const effectiveLevel = computeLevel((_profile.xp ?? 0) + _pendingXP);
-  return effectiveLevel >= (LEVEL_UNLOCKS[key] ?? 999);
+  return getClaimedLevel() >= (LEVEL_UNLOCKS[key] ?? 999);
 }
 
+export function getClaimedLevel(): number {
+  return _profile?.claimedLevel ?? _profile?.level ?? 1;
+}
+
+export function getProjectedLevel(): number {
+  if (!_profile) return 1;
+  return computeLevel((_profile.xp ?? 0) + _pendingXP);
+}
+
+export function claimLevelUp(newLevel: number): void {
+  if (!_profile) return;
+  _profile.claimedLevel = Math.max(getClaimedLevel(), newLevel);
+  _dirty = true;
+}
+
+// Per-level XP costs: 500, 1k, 2.5k, 5k, 10k, 25k, 50k, 100k, 250k, 500k, 1M, 2.5M, ...
 export const LEVEL_THRESHOLDS: number[] = [
-  0,      // lv1
-  300,    // lv2
-  700,    // lv3  — DASH
-  1300,   // lv4
-  2200,   // lv5  — FAMILIAR
-  3400,   // lv6
-  5000,   // lv7
-  7000,   // lv8  — DOUBLE DASH
-  9500,   // lv9
-  12500,  // lv10 — MOUNT + JUMP
-  17000,  // lv11
-  22000,  // lv12
-  28000,  // lv13 — SPECIAL METER
-  36000,  // lv14
-  46000,  // lv15 — FAMILIAR UPGRADE
-  58000,  // lv16
-  73000,  // lv17
-  91000,  // lv18
-  112000, // lv19
-  137000, // lv20 — MOUNT UPGRADE
+  0,           // lv1  (start)
+  500,         // lv2  (+500)
+  1_500,       // lv3  (+1 000)     — DASH
+  4_000,       // lv4  (+2 500)
+  9_000,       // lv5  (+5 000)     — FAMILIAR
+  19_000,      // lv6  (+10 000)
+  44_000,      // lv7  (+25 000)
+  94_000,      // lv8  (+50 000)    — DOUBLE DASH
+  194_000,     // lv9  (+100 000)
+  444_000,     // lv10 (+250 000)   — MOUNT + JUMP
+  944_000,     // lv11 (+500 000)
+  1_944_000,   // lv12 (+1 000 000)
+  4_444_000,   // lv13 (+2 500 000) — SPECIAL METER
+  9_444_000,   // lv14 (+5 000 000)
+  19_444_000,  // lv15 (+10 000 000) — FAMILIAR UPGRADE
+  44_444_000,  // lv16 (+25 000 000)
+  94_444_000,  // lv17 (+50 000 000)
+  194_444_000, // lv18 (+100 000 000)
+  444_444_000, // lv19 (+250 000 000)
+  944_444_000, // lv20 (+500 000 000) — MOUNT UPGRADE
 ];
 
 export function computeLevel(xp: number): number {
@@ -110,7 +126,7 @@ const STD     = [10,25,50,100,250,500,1000,2500,5000,10000];
 const STD_XP  = [100,200,300,400,500,600,700,800,900,1000];
 const DOLLAR  = [100000,500000,1000000,5000000,10000000,25000000,50000000,100000000];
 const DLRXP   = [100,200,300,400,500,600,700,800];
-const SESSION = [1,5,10,25,50,100,250,500,1000,2500];
+const SESSION = [5,10,25,50,100,250,500,1000,2500,5000];
 
 export const ACHIEVEMENTS: AchievementDef[] = [
   // Cooking
@@ -223,6 +239,7 @@ export async function loadProfile(uid: string): Promise<UserProfile> {
     _profile.unlockedSkins  ??= ['default'];
     _profile.activeSkin     ??= 'default';
     _profile.prestige       ??= 0;
+    _profile.claimedLevel   ??= _profile.level; // existing players inherit their current level
     if (now - _profile.dailyXPStart >= 86_400_000) {
       _profile.dailyXP = 0;
       _profile.dailyXPStart = now;
@@ -292,14 +309,16 @@ export async function saveProfilePrefs(): Promise<void> {
       activeSkin:      _profile.activeSkin ?? 'default',
       unlockedSkins:   _profile.unlockedSkins ?? ['default'],
       familiarAbility: _profile.familiarAbility ?? null,
+      claimedLevel:    _profile.claimedLevel ?? 1,
     });
   } catch (e) { console.error('[profile] save prefs failed', e); }
 }
 
 export async function resetProfile(): Promise<void> {
   if (!_profile) return;
-  _profile.xp = 0; _profile.level = 1;
+  _profile.xp = 0; _profile.level = 1; _profile.claimedLevel = 1;
   _profile.stats = {}; _profile.achievements = {};
+  _profile.familiarAbility = undefined;
   _profile.dailyXP = 0; _profile.dailyXPStart = Date.now();
   _profile.prestige = (_profile.prestige ?? 0) + 1;
   _pendingXP = 0; _pendingDailyXP = 0; _dirty = false; _notifiedLevel = 0;
