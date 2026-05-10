@@ -44,7 +44,7 @@ export function updateHUDRunStats(sales: number, cogs: number, labor: number, wa
 // ─── Sprite cache ─────────────────────────────────────────────────────────────
 
 const _sprites: Partial<Record<string, HTMLImageElement>> = {};
-let _eagleImg: HTMLImageElement | null = null;
+let _eagleImg: HTMLCanvasElement | null = null;
 
 export function loadSprites(): void {
   const keys = [
@@ -58,7 +58,20 @@ export function loadSprites(): void {
     img.onload = () => { _sprites[key] = img; };
   }
   const eagle = new Image();
-  eagle.onload = () => { _eagleImg = eagle; };
+  eagle.onload = () => {
+    // Strip white background by zeroing near-white pixels on an offscreen canvas
+    const oc = document.createElement('canvas');
+    oc.width = eagle.naturalWidth; oc.height = eagle.naturalHeight;
+    const oc2d = oc.getContext('2d')!;
+    oc2d.drawImage(eagle, 0, 0);
+    const id = oc2d.getImageData(0, 0, oc.width, oc.height);
+    const px = id.data;
+    for (let i = 0; i < px.length; i += 4) {
+      if (px[i] > 230 && px[i + 1] > 230 && px[i + 2] > 230) px[i + 3] = 0;
+    }
+    oc2d.putImageData(id, 0, 0);
+    _eagleImg = oc;
+  };
   eagle.src = '/images/eagle-familiar.png';
 }
 
@@ -730,8 +743,8 @@ function drawFamiliar(gs: GameState): void {
   ctx.beginPath(); ctx.ellipse(x, y + 16, 11, 4, 0, 0, Math.PI * 2); ctx.fill();
 
   if (_eagleImg) {
-    const fw = _eagleImg.naturalWidth / 2;   // frame width  (col 0=wings up, col 1=wings down)
-    const fh = _eagleImg.naturalHeight / 4;  // frame height (row 0=up, 1=down, 2=left, 3=right)
+    const fw = _eagleImg.width / 2;   // frame width  (col 0=wings up, col 1=wings down)
+    const fh = _eagleImg.height / 4;  // frame height (row 0=up, 1=down, 2=left, 3=right)
     const col = Math.floor(Date.now() / 250) % 2;
     const dirRowMap: Record<string, number> = { up: 0, down: 1, left: 2, right: 3 };
     const row = dirRowMap[facingDir(gs.player.facing)] ?? 1;
