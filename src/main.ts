@@ -1303,6 +1303,7 @@ document.getElementById('resetConfirm')?.addEventListener('click', async () => {
   updateAuthUI();
   updateLobbyXPBar();
   refreshSkillTree();
+  refreshMenuButtons();
   showToast('PROFILE RESET', 'Level and XP have been wiped');
 });
 document.getElementById('resetCancel')?.addEventListener('click', () => {
