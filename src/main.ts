@@ -421,6 +421,8 @@ function goToNameEntry(g: GameState, wasTutorial = false): void {
 }
 
 function goToGameReport(g: GameState): void {
+  lastGameWasTutorial = isTutorial;
+  if (isTutorial) { isTutorial = false; tutorialStep = 0; tutorialModalActive = false; }
   preparePostGame(g);
   playPlaylist(AFTER_GAME_TRACKS);
   screen = 'game_report';
