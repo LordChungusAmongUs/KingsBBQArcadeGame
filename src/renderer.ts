@@ -57,8 +57,9 @@ export function loadSprites(): void {
     img.src = `/images/${key}.png`;
     img.onload = () => { _sprites[key] = img; };
   }
-  _eagleImg = new Image();
-  _eagleImg.src = '/images/eagle-familiar.png';
+  const eagle = new Image();
+  eagle.onload = () => { _eagleImg = eagle; };
+  eagle.src = '/images/eagle-familiar.png';
 }
 
 export function initRenderer(canvas: HTMLCanvasElement): void {
@@ -728,7 +729,7 @@ function drawFamiliar(gs: GameState): void {
   ctx.fillStyle = 'rgba(0,0,0,0.25)';
   ctx.beginPath(); ctx.ellipse(x, y + 16, 11, 4, 0, 0, Math.PI * 2); ctx.fill();
 
-  if (_eagleImg?.complete && _eagleImg.naturalWidth > 0) {
+  if (_eagleImg) {
     const fw = _eagleImg.naturalWidth / 2;   // frame width  (col 0=wings up, col 1=wings down)
     const fh = _eagleImg.naturalHeight / 4;  // frame height (row 0=up, 1=down, 2=left, 3=right)
     const col = Math.floor(Date.now() / 250) % 2;
