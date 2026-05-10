@@ -197,7 +197,7 @@ function tickFamiliar(gs: GameState, dt: number): void {
   // carry ability: no per-frame logic needed — stack limit is raised in doInteract/tickMenu via carryLimit()
 }
 
-// ── Cook boost: hold E near grill/fryer → 2x cook speed (unconditional) ───────
+// ── Cook boost: hold E near grill/fryer → 2x cook speed (familiar: cook_speed) ─
 export const boostedStationIds = new Set<string>();
 let _boostParticleTimer = 0;
 
@@ -205,6 +205,9 @@ const BOOST_RANGE = INTERACT_RANGE * 2.5;
 
 function tickCookBoost(gs: GameState, dt: number): void {
   boostedStationIds.clear();
+  const ability = gs.meterActive ? 'all' : getProfile()?.familiarAbility;
+  const canBoost = gs.meterActive || (hasUnlock('familiar') && ability === 'cook_speed');
+  if (!canBoost) return;
   // Use keys.has for real-time state — interactHeld has a one-frame lag vs tickGame
   if (!keys.has('KeyE') && !keys.has('Space')) { _boostParticleTimer = 0; return; }
   for (const s of gs.stations) {
