@@ -58,7 +58,7 @@ export function loadSprites(): void {
     img.onload = () => { _sprites[key] = img; };
   }
   _eagleImg = new Image();
-  _eagleImg.src = '/images/eagle%20familiar.png';
+  _eagleImg.src = '/images/eagle-familiar.png';
 }
 
 export function initRenderer(canvas: HTMLCanvasElement): void {
