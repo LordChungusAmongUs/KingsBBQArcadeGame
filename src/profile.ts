@@ -16,6 +16,8 @@ export interface UserProfile {
   prestige?: number;
   claimedLevel?: number;
   tutorialCompleted?: boolean;
+  activeCharacter?: string;
+  characterXP?: Record<string, number>;
 }
 
 export type FamiliarAbility = 'cook_speed' | 'chop_speed' | 'carry' | 'eat_leftovers';
@@ -43,6 +45,22 @@ export const SKIN_POOL: SkinDef[] = [
   { id: 'sage',      name: 'Sage',      apronColor: '#608060' },
   { id: 'tangerine', name: 'Tangerine', apronColor: '#e86010' },
   { id: 'pearl',     name: 'Pearl',     apronColor: '#c8c0a0' },
+];
+
+export interface CharacterDef {
+  id: string;
+  name: string;
+  tagline: string;
+  color: string;       // accent color for UI
+  unlockLevel: number; // global account level required
+}
+
+export const CHARACTER_POOL: CharacterDef[] = [
+  { id: 'rookie',     name: 'ROOKIE',     tagline: 'The eager newcomer — hungry to prove it.',        color: '#f84', unlockLevel: 0  },
+  { id: 'pitmaster',  name: 'PIT MASTER', tagline: 'Low and slow. Every smoke ring tells a story.',   color: '#fa4', unlockLevel: 3  },
+  { id: 'blaze',      name: 'BLAZE',      tagline: 'Turns up the heat. Born to grill.',                color: '#f44', unlockLevel: 5  },
+  { id: 'smoke',      name: 'SMOKE',      tagline: 'Cool under pressure. Flavor in every layer.',      color: '#8af', unlockLevel: 10 },
+  { id: 'the_legend', name: 'THE LEGEND', tagline: 'A BBQ icon. The food speaks for itself.',          color: '#af8', unlockLevel: 15 },
 ];
 
 // Feature unlock thresholds by player level
@@ -73,6 +91,26 @@ export function getProjectedLevel(): number {
 export function claimLevelUp(newLevel: number): void {
   if (!_profile) return;
   _profile.claimedLevel = Math.max(getClaimedLevel(), newLevel);
+  _dirty = true;
+}
+
+export function getCharacterXP(charId: string): number {
+  return (_profile?.characterXP?.[charId] ?? 0) + (_pendingCharacterXP[charId] ?? 0);
+}
+
+export function getCharacterLevel(charId: string): number {
+  return computeLevel(getCharacterXP(charId));
+}
+
+export function isCharacterUnlocked(charId: string): boolean {
+  const def = CHARACTER_POOL.find(c => c.id === charId);
+  if (!def) return false;
+  return (_profile?.level ?? 1) >= def.unlockLevel;
+}
+
+export function setActiveCharacter(charId: string): void {
+  if (!_profile || !isCharacterUnlocked(charId)) return;
+  _profile.activeCharacter = charId;
   _dirty = true;
 }
 
@@ -206,6 +244,7 @@ export function getDailyMultiplier(): number {
 let _profile: UserProfile | null = null;
 let _pendingXP = 0;
 let _pendingDailyXP = 0;
+let _pendingCharacterXP: Record<string, number> = {};
 let _dirty = false;
 
 type LevelUpCb    = (oldLv: number, newLv: number) => void;
@@ -254,6 +293,8 @@ export async function loadProfile(uid: string): Promise<UserProfile> {
     _profile.activeSkin     ??= 'default';
     _profile.prestige       ??= 0;
     _profile.claimedLevel   ??= _profile.level; // existing players inherit their current level
+    _profile.characterXP     ??= {};
+    _profile.activeCharacter ??= 'rookie';
     // Grandfather existing players: if they've played before, skip tutorial requirement
     if (_profile.tutorialCompleted === undefined) {
       _profile.tutorialCompleted = (_profile.level ?? 1) > 1 || (_profile.stats?.solo_sessions ?? 0) > 0;
@@ -263,7 +304,7 @@ export async function loadProfile(uid: string): Promise<UserProfile> {
       _profile.dailyXPStart = now;
     }
   } else {
-    _profile = { uid, xp: 0, level: 1, stats: {}, achievements: {}, dailyXP: 0, dailyXPStart: now, unlockedSkins: ['default'], activeSkin: 'default', prestige: 0 };
+    _profile = { uid, xp: 0, level: 1, stats: {}, achievements: {}, dailyXP: 0, dailyXPStart: now, unlockedSkins: ['default'], activeSkin: 'default', prestige: 0, characterXP: {}, activeCharacter: 'rookie' };
     await setDoc(r, _profile);
   }
   _pendingXP = 0; _pendingDailyXP = 0; _dirty = false; _notifiedLevel = 0;
@@ -283,6 +324,8 @@ export function awardXP(amount: number): number {
   const effective = amount * mult;
   _pendingXP += effective;
   _pendingDailyXP += effective;
+  const _cid = _profile.activeCharacter ?? 'rookie';
+  _pendingCharacterXP[_cid] = (_pendingCharacterXP[_cid] ?? 0) + effective;
   _dirty = true;
   _checkEarlyLevelUp();
   return effective;
@@ -297,6 +340,7 @@ export function getTotalXP(): number {
 export function clearPendingXP(): void {
   _pendingXP = 0;
   _pendingDailyXP = 0;
+  _pendingCharacterXP = {};
   _dirty = false;
   _notifiedLevel = 0;
 }
@@ -329,6 +373,7 @@ export async function saveProfilePrefs(): Promise<void> {
       familiarAbility:    _profile.familiarAbility ?? null,
       claimedLevel:       _profile.claimedLevel ?? 1,
       tutorialCompleted:  _profile.tutorialCompleted ?? false,
+      activeCharacter:    _profile.activeCharacter ?? 'rookie',
     });
   } catch (e) { console.error('[profile] save prefs failed', e); }
 }
@@ -341,6 +386,9 @@ export async function resetProfile(): Promise<void> {
   _profile.familiarAbility = undefined;
   _profile.dailyXP = 0; _profile.dailyXPStart = Date.now();
   _profile.prestige = (_profile.prestige ?? 0) + 1;
+  _profile.characterXP = {};
+  _profile.activeCharacter = 'rookie';
+  _pendingCharacterXP = {};
   _pendingXP = 0; _pendingDailyXP = 0; _dirty = false; _notifiedLevel = 0;
   try {
     await setDoc(doc(db, 'profiles', _profile.uid), _profile);
@@ -399,6 +447,11 @@ export async function flushSession(): Promise<void> {
     _profile.dailyXP = (_profile.dailyXP ?? 0) + _pendingDailyXP;
   }
   _pendingDailyXP = 0;
+  // Flush character XP
+  for (const [cid, xp] of Object.entries(_pendingCharacterXP)) {
+    _profile.characterXP![cid] = (_profile.characterXP![cid] ?? 0) + xp;
+  }
+  _pendingCharacterXP = {};
   _profile.xp   += _pendingXP;
   _pendingXP     = 0;
   _dirty         = false;
@@ -411,6 +464,8 @@ export async function flushSession(): Promise<void> {
       unlockedSkins: _profile.unlockedSkins, activeSkin: _profile.activeSkin,
       gender: _profile.gender ?? null, familiarAbility: _profile.familiarAbility ?? null,
       prestige: _profile.prestige ?? 0, tutorialCompleted: _profile.tutorialCompleted ?? false,
+      activeCharacter: _profile.activeCharacter ?? 'rookie',
+      characterXP:     _profile.characterXP ?? {},
     });
     if (_profile.level > oldLevel) {
       // Unlock a random skin not yet owned

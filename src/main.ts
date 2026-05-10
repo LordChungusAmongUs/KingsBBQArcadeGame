@@ -46,10 +46,11 @@ import {
   incrementStat, recordMaxStat,
   xpProgress, ACHIEVEMENTS, clearPendingXP,
   resetProfile, setGender, setActiveSkin, setFamiliarAbility, saveProfilePrefs,
-  LEVEL_UNLOCKS, SKIN_POOL,
+  LEVEL_UNLOCKS, SKIN_POOL, CHARACTER_POOL,
   getClaimedLevel, getProjectedLevel, claimLevelUp,
   isTutorialCompleted, markTutorialComplete,
-  type UserProfile, type FamiliarAbility, type SkinDef,
+  getCharacterXP, getCharacterLevel, isCharacterUnlocked, setActiveCharacter,
+  type UserProfile, type FamiliarAbility, type SkinDef, type CharacterDef,
 } from './profile';
 import {
   saveCloudScore, loadCloudLeaderboard,
@@ -1296,6 +1297,62 @@ function refreshSkillTree(): void {
   document.querySelectorAll<HTMLElement>('.st-fam-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.ability === chosen);
   });
+
+  // ── Wardrobe ──────────────────────────────────────────────────────
+  const skinGrid = document.getElementById('stSkinGrid');
+  if (skinGrid) {
+    const unlocked = prof?.unlockedSkins ?? ['default'];
+    const activeSkin = prof?.activeSkin ?? 'default';
+    skinGrid.innerHTML = SKIN_POOL.map(s => {
+      const isUnlocked = unlocked.includes(s.id);
+      const isActive   = s.id === activeSkin;
+      return `<div class="st-skin-swatch${isActive ? ' st-active' : ''}${isUnlocked ? '' : ' st-locked'}"
+        data-skin="${s.id}"
+        style="background:${s.apronColor};"
+        title="${s.name}${isActive ? ' (active)' : isUnlocked ? '' : ' — locked'}"
+        >${escHtml(s.name)}</div>`;
+    }).join('');
+    skinGrid.querySelectorAll<HTMLElement>('.st-skin-swatch:not(.st-locked)').forEach(el => {
+      el.addEventListener('click', () => {
+        setActiveSkin(el.dataset.skin!);
+        saveProfilePrefs().catch(console.error);
+        refreshSkillTree();
+      });
+    });
+  }
+
+  // ── Characters ────────────────────────────────────────────────────
+  const charList = document.getElementById('stCharList');
+  if (charList) {
+    const globalLv    = prof?.level ?? 1;
+    const activeChar  = prof?.activeCharacter ?? 'rookie';
+    charList.innerHTML = CHARACTER_POOL.map(c => {
+      const unlocked = globalLv >= c.unlockLevel || c.unlockLevel === 0;
+      const isActive = c.id === activeChar;
+      const cxp      = getCharacterXP(c.id);
+      const clv      = getCharacterLevel(c.id);
+      const prog     = xpProgress(cxp);
+      const pct      = prog.needed > 0 ? Math.round(prog.current / prog.needed * 100) : 100;
+      return `<div class="st-char-card${isActive ? ' st-active' : ''}${unlocked ? '' : ' st-locked'}" data-char="${c.id}">
+        <div class="st-char-stripe" style="background:${c.color}"></div>
+        <div class="st-char-info">
+          <div class="st-char-name" style="color:${c.color}">${escHtml(c.name)}${isActive ? '  ✓' : ''}</div>
+          <div class="st-char-tag">${escHtml(c.tagline)}</div>
+          ${unlocked
+            ? `<div class="st-char-lv">LVL ${clv}  ·  ${cxp.toLocaleString()} XP</div>
+               <div class="st-char-bar"><div class="st-char-bar-fill" style="width:${pct}%;background:${c.color}"></div></div>`
+            : `<div class="st-char-lock">Reach Level ${c.unlockLevel} to unlock</div>`}
+        </div>
+      </div>`;
+    }).join('');
+    charList.querySelectorAll<HTMLElement>('.st-char-card:not(.st-locked)').forEach(el => {
+      el.addEventListener('click', () => {
+        setActiveCharacter(el.dataset.char!);
+        saveProfilePrefs().catch(console.error);
+        refreshSkillTree();
+      });
+    });
+  }
 }
 
 function openSkillTree(): void {

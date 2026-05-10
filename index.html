@@ -100,6 +100,43 @@
     .st-reset-btn { padding: 10px 18px; border: 1px solid #622; color: #f66; background: transparent; font-family: inherit; font-size: 12px; letter-spacing: 0.15em; cursor: pointer; border-radius: 4px; }
     .st-reset-btn:hover { background: #2a0808; color: #faa; }
 
+    /* ── Skill tree: wardrobe + characters ─────────────────────────── */
+    .st-section-title {
+      color: #f84; font-size: 11px; letter-spacing: 3px; font-weight: bold;
+      width: 100%; max-width: 500px; text-align: left;
+      border-top: 1px solid #1e1408; padding-top: 14px; margin-top: 10px; margin-bottom: 8px;
+    }
+    /* Skins */
+    .st-skin-grid { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; max-width: 500px; margin-bottom: 4px; }
+    .st-skin-swatch {
+      width: 62px; height: 56px; border-radius: 6px; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+      padding-bottom: 4px; transition: transform 0.12s, opacity 0.12s;
+      border: 2px solid transparent; font-size: 8px; color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.9); letter-spacing: 0.3px; user-select: none;
+    }
+    .st-skin-swatch:not(.st-locked):hover { transform: scale(1.1); }
+    .st-skin-swatch.st-active { border-color: #fff; }
+    .st-skin-swatch.st-locked { opacity: 0.22; cursor: default; filter: grayscale(1); }
+    /* Characters */
+    .st-char-list { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 500px; }
+    .st-char-card {
+      display: flex; gap: 12px; padding: 11px 14px; border-radius: 6px;
+      border: 1px solid #222; background: #0e0a06; cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .st-char-card:not(.st-locked):hover { background: #1a1008; border-color: #443; }
+    .st-char-card.st-active { border-color: #f84; background: #180e04; }
+    .st-char-card.st-locked { opacity: 0.32; cursor: default; }
+    .st-char-stripe { width: 6px; border-radius: 3px; flex-shrink: 0; min-height: 48px; }
+    .st-char-info { flex: 1; min-width: 0; }
+    .st-char-name { font-weight: bold; font-size: 13px; letter-spacing: 1px; }
+    .st-char-tag  { color: #665; font-size: 10px; margin: 3px 0 6px; }
+    .st-char-lv   { color: #887; font-size: 10px; margin-bottom: 4px; }
+    .st-char-bar  { background: #1a1208; border-radius: 2px; height: 4px; overflow: hidden; }
+    .st-char-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+    .st-char-lock { color: #443; font-size: 10px; }
+
     /* ── Auth section ──────────────────────────────────────────────── */
     #authSection {
       display: flex; align-items: center; gap: 0.7rem;
@@ -621,6 +658,13 @@
         </div>
 
       </div>
+
+      <div class="st-section-title">WARDROBE</div>
+      <div id="stSkinGrid" class="st-skin-grid"></div>
+
+      <div class="st-section-title">CHARACTERS</div>
+      <div id="stCharList" class="st-char-list"></div>
+
       <div class="st-footer">
         <button class="st-reset-btn" id="stResetBtn">RESET PROFILE</button>
         <button class="st-close-btn" id="stCloseBtn">CLOSE</button>
