@@ -54,6 +54,8 @@
     #coopBtn:hover, #coopBtn:focus    { background: #4af3; color: #fff; outline: none; }
     #lobbyBtn  { border: 2px solid #fa4; color: #fa4; }
     #lobbyBtn:hover, #lobbyBtn:focus  { background: #fa43; color: #fff; outline: none; }
+    #startBtn:disabled, #lobbyBtn:disabled { opacity: 0.28; cursor: not-allowed; border-color: #444; color: #444; pointer-events: none; }
+    #btnLockMsg { color: #665; font-size: 0.7rem; letter-spacing: 0.12em; text-align: center; margin-top: 6px; min-height: 0.85em; }
     #fsBtn     { border: 2px solid #585; color: #585; font-size: 0.82rem; }
     #fsBtn:hover, #fsBtn:focus        { background: #5853; color: #afa; outline: none; }
     .controls { margin-top: 1.2rem; color: #554; font-size: 0.75rem; letter-spacing: 0.1em; text-align: center; line-height: 2; }
@@ -534,6 +536,7 @@
         <button id="startBtn">ROOKIE</button>
         <button id="lobbyBtn">PRO</button>
       </div>
+      <div id="btnLockMsg"></div>
       <div style="margin-top:10px;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;">
         <button id="skillTreeBtn">🌟 SKILL TREE</button>
       </div>

@@ -15,6 +15,7 @@ export interface UserProfile {
   familiarAbility?: FamiliarAbility;
   prestige?: number;
   claimedLevel?: number;
+  tutorialCompleted?: boolean;
 }
 
 export type FamiliarAbility = 'cook_speed' | 'chop_speed' | 'carry' | 'eat_leftovers';
@@ -73,6 +74,17 @@ export function claimLevelUp(newLevel: number): void {
   if (!_profile) return;
   _profile.claimedLevel = Math.max(getClaimedLevel(), newLevel);
   _dirty = true;
+}
+
+export function isTutorialCompleted(): boolean {
+  return _profile?.tutorialCompleted ?? false;
+}
+
+export function markTutorialComplete(): void {
+  if (!_profile || _profile.tutorialCompleted) return;
+  _profile.tutorialCompleted = true;
+  _dirty = true;
+  incrementStat('tutorial_completed', 1); // triggers the 500 XP achievement
 }
 
 // Per-level XP costs: 500, 1k, 2.5k, 5k, 10k, 25k, 50k, 100k, 250k, 500k, 1M, 2.5M, ...
@@ -152,6 +164,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id:'bbq_chops',           name:'Knife Skills',       desc:'Chop smoked pork at the chop station',            stat:'bbq_chops',             tiers:STD,     xpPerTier:STD_XP  },
   { id:'customers_lost',      name:'Customer Service',   desc:'Let customers walk out without being served',     stat:'customers_lost',        tiers:STD,     xpPerTier:STD_XP  },
   { id:'food_burned',         name:'Smoke Show',         desc:'Burn food by leaving it on too long',             stat:'food_burned',           tiers:STD,     xpPerTier:STD_XP  },
+  // Tutorial
+  { id:'tutorial_complete',   name:'Graduate',           desc:'Complete the training tutorial',                  stat:'tutorial_completed',    tiers:[1],     xpPerTier:[500]   },
   // Sessions
   { id:'solo_sessions',       name:'Solo Chef',          desc:'Play solo game sessions',                         stat:'solo_sessions',         tiers:SESSION, xpPerTier:STD_XP  },
   { id:'coop_sessions',       name:'Team Player',        desc:'Play co-op game sessions with a partner',         stat:'coop_sessions',         tiers:SESSION, xpPerTier:STD_XP  },
@@ -240,6 +254,10 @@ export async function loadProfile(uid: string): Promise<UserProfile> {
     _profile.activeSkin     ??= 'default';
     _profile.prestige       ??= 0;
     _profile.claimedLevel   ??= _profile.level; // existing players inherit their current level
+    // Grandfather existing players: if they've played before, skip tutorial requirement
+    if (_profile.tutorialCompleted === undefined) {
+      _profile.tutorialCompleted = (_profile.level ?? 1) > 1 || (_profile.stats?.solo_sessions ?? 0) > 0;
+    }
     if (now - _profile.dailyXPStart >= 86_400_000) {
       _profile.dailyXP = 0;
       _profile.dailyXPStart = now;
@@ -308,8 +326,9 @@ export async function saveProfilePrefs(): Promise<void> {
       gender:          _profile.gender ?? null,
       activeSkin:      _profile.activeSkin ?? 'default',
       unlockedSkins:   _profile.unlockedSkins ?? ['default'],
-      familiarAbility: _profile.familiarAbility ?? null,
-      claimedLevel:    _profile.claimedLevel ?? 1,
+      familiarAbility:    _profile.familiarAbility ?? null,
+      claimedLevel:       _profile.claimedLevel ?? 1,
+      tutorialCompleted:  _profile.tutorialCompleted ?? false,
     });
   } catch (e) { console.error('[profile] save prefs failed', e); }
 }
@@ -317,6 +336,7 @@ export async function saveProfilePrefs(): Promise<void> {
 export async function resetProfile(): Promise<void> {
   if (!_profile) return;
   _profile.xp = 0; _profile.level = 1; _profile.claimedLevel = 1;
+  _profile.tutorialCompleted = false;
   _profile.stats = {}; _profile.achievements = {};
   _profile.familiarAbility = undefined;
   _profile.dailyXP = 0; _profile.dailyXPStart = Date.now();
@@ -389,7 +409,7 @@ export async function flushSession(): Promise<void> {
       dailyXP: _profile.dailyXP, dailyXPStart: _profile.dailyXPStart,
       unlockedSkins: _profile.unlockedSkins, activeSkin: _profile.activeSkin,
       gender: _profile.gender ?? null, familiarAbility: _profile.familiarAbility ?? null,
-      prestige: _profile.prestige ?? 0,
+      prestige: _profile.prestige ?? 0, tutorialCompleted: _profile.tutorialCompleted ?? false,
     });
     if (_profile.level > oldLevel) {
       // Unlock a random skin not yet owned

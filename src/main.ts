@@ -48,6 +48,7 @@ import {
   resetProfile, setGender, setActiveSkin, setFamiliarAbility, saveProfilePrefs,
   LEVEL_UNLOCKS, SKIN_POOL,
   getClaimedLevel, getProjectedLevel, claimLevelUp,
+  isTutorialCompleted, markTutorialComplete,
   type UserProfile, type FamiliarAbility, type SkinDef,
 } from './profile';
 import {
@@ -295,12 +296,28 @@ function enterFullscreenLandscape(): void {
   (window.screen.orientation as any)?.lock?.('landscape').catch(() => {});
 }
 
+function refreshMenuButtons(): void {
+  const tutDone  = isTutorialCompleted();
+  const lvl      = getProfile()?.level ?? 1;
+  const startBtn = document.getElementById('startBtn') as HTMLButtonElement;
+  const lobbyBtn = document.getElementById('lobbyBtn') as HTMLButtonElement;
+  const lockMsg  = document.getElementById('btnLockMsg');
+  startBtn.disabled = !tutDone;
+  lobbyBtn.disabled = !tutDone || lvl < 3;
+  if (lockMsg) {
+    if (!tutDone)       lockMsg.textContent = 'Complete TRAINING to unlock ROOKIE & PRO';
+    else if (lvl < 3)   lockMsg.textContent = 'Reach Level 3 to unlock PRO';
+    else                lockMsg.textContent = '';
+  }
+}
+
 function showMenu(): void {
   if (gs) flushSession().catch(console.error); // save any pending XP earned before quitting
   gs = null;
   menu.style.display = 'flex';
   touchControls.classList.remove('game-active');
   updateMenuLeaderboard();
+  refreshMenuButtons();
   setTimeout(() => focusMenuBtn(0), 0);
   enterFullscreenLandscape();
   playMusic('/audio/Main%20Theme.mp3');
@@ -953,6 +970,7 @@ function loop(now: number): void {
     runSatisfactionSum += gs.levelSatisfactionSum; runSatisfactionCount += gs.levelSatisfactionCount;
     if (isTutorial && gs.level === 2) {
       isTutorial = false; tutorialStep = 0; tutorialModalActive = false;
+      markTutorialComplete();
       goToNameEntry(gs); requestAnimationFrame(loop); return;
     }
     // Check for level-up reward before advancing to next stage
