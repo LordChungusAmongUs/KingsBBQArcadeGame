@@ -101,29 +101,41 @@ export function buildStations(): Station[] {
       slots: Array.from({ length: 4 }, () => slot()),
     },
 
-    // ── Front area ────────────────────────────────────────────────────────────
+    // ── Front wall (left → right) ─────────────────────────────────────────────
+    {
+      id: 'trash', kind: 'trash',
+      x: 155, y: KY + KH - 98, w: 58, h: 90,
+      label: 'TRASH', color: '#333',
+      slots: [],
+    },
+    {
+      id: 'counter', kind: 'counter',
+      x: 223, y: KY + KH - 98, w: 118, h: 90,
+      label: 'COUNTER', color: '#448',
+      slots: [],
+    },
     {
       id: 'chop', kind: 'chop',
-      x: 50, y: KY + KH - 98, w: 100, h: 90,
+      x: 351, y: KY + KH - 98, w: 100, h: 90,
       label: 'CHOP', color: '#765',
       slots: [],
     },
     {
       id: 'prep', kind: 'prep',
-      x: KX + 30, y: KY + KH - 98, w: 390, h: 90,
-      label: 'PREP TABLE', color: '#484',
+      x: 461, y: KY + KH - 98, w: 184, h: 90,
+      label: 'PREP 1', color: '#484',
       slots: [],
     },
     {
-      id: 'counter', kind: 'counter',
-      x: KX + 440, y: KY + KH - 98, w: 200, h: 90,
-      label: 'COUNTER', color: '#448',
+      id: 'prep2', kind: 'prep',
+      x: 655, y: KY + KH - 98, w: 184, h: 90,
+      label: 'PREP 2', color: '#484',
       slots: [],
     },
     {
-      id: 'trash', kind: 'trash',
-      x: KX + 655, y: KY + KH - 98, w: 80, h: 90,
-      label: 'TRASH', color: '#333',
+      id: 'service_counter', kind: 'counter',
+      x: 849, y: KY + KH - 98, w: 118, h: 90,
+      label: 'SERVICE', color: '#448',
       slots: [],
     },
   ];

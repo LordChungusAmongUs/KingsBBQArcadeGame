@@ -1090,7 +1090,8 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
           return;
         }
       }
-      // No order needs it yet — stage it on the prep table (+1 XP for placing food)
+      // No order needs it yet — stage it on the prep table (max 16 items across both tables)
+      if (gs.staged.length >= 16) return;
       const stageCount = (p.held.food === 'fries' || p.held.food === 'rings') ? 2 : 1;
       gs.staged.push({ food: p.held.food, spoilTimer: 0, spoiled: false, count: stageCount });
       { const xp = awardXP(1); xpBreakdown.orders += xp;
