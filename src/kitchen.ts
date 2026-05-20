@@ -109,12 +109,6 @@ export function buildStations(): Station[] {
       slots: [],
     },
     {
-      id: 'counter', kind: 'counter',
-      x: 223, y: KY + KH - 98, w: 118, h: 90,
-      label: 'COUNTER', color: '#448',
-      slots: [],
-    },
-    {
       id: 'chop', kind: 'chop',
       x: 351, y: KY + KH - 98, w: 100, h: 90,
       label: 'CHOP', color: '#765',
