@@ -64,7 +64,7 @@ function carryLimit(gs: GameState, owner: number): number {
 }
 let _orderId = 1;
 
-export function createGame(level: number, carryScore = 0, playerCount = 1, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0, carryMeter = 0): GameState {
+export function createGame(level: number, carryScore = 0, playerCount = 1, smokerSlots?: CookSlot[][], carryFailed = 0, thresholdsUnlocked = 0, carryMeter = 0): GameState {
   const lvl = LEVELS[level - 1];
   const coop = playerCount > 1;
   const game: GameState = {
@@ -110,8 +110,10 @@ export function createGame(level: number, carryScore = 0, playerCount = 1, smoke
     meter: carryMeter, meterActive: false, meterTimer: 0,
   };
   if (smokerSlots) {
-    const smoker = game.stations.find(s => s.kind === 'smoker');
-    if (smoker) smoker.slots = smokerSlots.map(sl => ({ ...sl }));
+    const smokers = game.stations.filter(s => s.kind === 'smoker');
+    smokerSlots.forEach((slots, i) => {
+      if (smokers[i]) smokers[i].slots = slots.map(sl => ({ ...sl }));
+    });
   }
   for (let i = 0; i < 4; i++) _dash[i].remaining = 0;
   return game;
@@ -593,18 +595,18 @@ function tickStaged(gs: GameState, dt: number): void {
 }
 
 function tickSmoker(gs: GameState): void {
-  const smoker = gs.stations.find(s => s.kind === 'smoker');
-  if (!smoker) return;
-  for (const slot of smoker.slots) {
-    if (slot.state !== 'cooking' || slot.smokerPlacedLevel === undefined) continue;
-    if (gs.level <= slot.smokerPlacedLevel) continue;
-    const targetReached = slot.smokerPlacedDuringPrep
-      ? gs.prepTimer <= slot.smokerPlacedAtTimer!          // placed during prep → compare prep countdown
-      : gs.levelTimer <= slot.smokerPlacedAtTimer!;        // placed during play → compare level countdown
-    if (targetReached) {
-      slot.state = 'ready';
-      slot.timer = 0;
-      incrementStat('shoulders_smoked', 1);
+  for (const smoker of gs.stations.filter(s => s.kind === 'smoker')) {
+    for (const slot of smoker.slots) {
+      if (slot.state !== 'cooking' || slot.smokerPlacedLevel === undefined) continue;
+      if (gs.level <= slot.smokerPlacedLevel) continue;
+      const targetReached = slot.smokerPlacedDuringPrep
+        ? gs.prepTimer <= slot.smokerPlacedAtTimer!
+        : gs.levelTimer <= slot.smokerPlacedAtTimer!;
+      if (targetReached) {
+        slot.state = 'ready';
+        slot.timer = 0;
+        incrementStat('shoulders_smoked', 1);
+      }
     }
   }
 }

@@ -14,69 +14,94 @@ function slot(food: FoodId | null = null): CookSlot {
 
 export function buildStations(): Station[] {
   return [
-    // ── Back wall ──────────────────────────────────────────────────────────────
+    // ── Back wall: 3 grills + 3 fryers ────────────────────────────────────────
     {
       id: 'grill1', kind: 'grill',
-      x: KX + 30, y: KY + 8, w: 130, h: 90,
+      x: KX + 10, y: KY + 8, w: 130, h: 90,
       label: 'GRILL 1', color: '#555',
       slotRows: 2,
       slots: Array.from({ length: 8 }, () => slot()),
     },
     {
       id: 'grill2', kind: 'grill',
-      x: KX + 168, y: KY + 8, w: 130, h: 90,
+      x: KX + 148, y: KY + 8, w: 130, h: 90,
       label: 'GRILL 2', color: '#555',
       slotRows: 2,
       slots: Array.from({ length: 8 }, () => slot()),
     },
     {
+      id: 'grill3', kind: 'grill',
+      x: KX + 286, y: KY + 8, w: 130, h: 90,
+      label: 'GRILL 3', color: '#555',
+      slotRows: 2,
+      slots: Array.from({ length: 8 }, () => slot()),
+    },
+    {
       id: 'fryer1', kind: 'fryer',
-      x: KX + 306, y: KY + 8, w: 76, h: 90,
+      x: KX + 424, y: KY + 8, w: 76, h: 90,
       label: 'FRYER 1', color: '#446',
       slots: Array.from({ length: 2 }, () => slot()),
     },
     {
       id: 'fryer2', kind: 'fryer',
-      x: KX + 390, y: KY + 8, w: 76, h: 90,
+      x: KX + 508, y: KY + 8, w: 76, h: 90,
       label: 'FRYER 2', color: '#446',
       slots: Array.from({ length: 2 }, () => slot()),
     },
+    {
+      id: 'fryer3', kind: 'fryer',
+      x: KX + 592, y: KY + 8, w: 76, h: 90,
+      label: 'FRYER 3', color: '#446',
+      slots: Array.from({ length: 2 }, () => slot()),
+    },
 
-    // ── Cooler & Freezer (back wall right) ────────────────────────────────────
+    // ── Right wall: cooler & freezer ──────────────────────────────────────────
     {
       id: 'cooler', kind: 'cooler',
-      x: KX + 480, y: KY + 8, w: 155, h: 90,
+      x: KX + KW - 92, y: KY + 20, w: 92, h: 130,
       label: 'COOLER', color: '#1a2a3a',
       slots: [],
       menu: ['raw_patty', 'raw_hotdog', 'raw_pork', 'cheese'],
     },
     {
       id: 'freezer', kind: 'freezer',
-      x: KX + 645, y: KY + 8, w: 130, h: 90,
+      x: KX + KW - 92, y: KY + 165, w: 92, h: 120,
       label: 'FREEZER', color: '#0a1a2e',
       slots: [],
       menu: ['raw_fries', 'raw_rings'],
     },
 
-    // ── Smoker (left wall) ────────────────────────────────────────────────────
+    // ── Left wall: 2 smokers + 2 warmers ─────────────────────────────────────
     {
       id: 'smoker', kind: 'smoker',
-      x: KX - 130, y: KY + 20, w: 120, h: 100,
-      label: 'SMOKER', color: '#543',
+      x: KX - 130, y: KY + 10, w: 120, h: 100,
+      label: 'SMOKER 1', color: '#543',
       slotRows: 2,
       slots: Array.from({ length: 4 }, () => slot()),
     },
-
-    // ── Warmer (left wall, below smoker) ─────────────────────────────────────
+    {
+      id: 'smoker2', kind: 'smoker',
+      x: KX - 130, y: KY + 120, w: 120, h: 100,
+      label: 'SMOKER 2', color: '#543',
+      slotRows: 2,
+      slots: Array.from({ length: 4 }, () => slot()),
+    },
     {
       id: 'warmer', kind: 'warmer',
-      x: KX - 130, y: KY + 211, w: 120, h: 90,
-      label: 'WARMER', color: '#7a4020',
+      x: KX - 130, y: KY + 234, w: 120, h: 85,
+      label: 'WARMER 1', color: '#7a4020',
+      slotRows: 2,
+      slots: Array.from({ length: 4 }, () => slot()),
+    },
+    {
+      id: 'warmer2', kind: 'warmer',
+      x: KX - 130, y: KY + 329, w: 120, h: 85,
+      label: 'WARMER 2', color: '#7a4020',
       slotRows: 2,
       slots: Array.from({ length: 4 }, () => slot()),
     },
 
-    // ── Front area ─────────────────────────────────────────────────────────────
+    // ── Front area ────────────────────────────────────────────────────────────
     {
       id: 'chop', kind: 'chop',
       x: 50, y: KY + KH - 98, w: 100, h: 90,

@@ -519,7 +519,7 @@ function hideMobileNameEntry(): void {
 
 // ─── Level management ─────────────────────────────────────────────────────────
 
-function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[], carryFailed = 0, thresholdsUnlocked = 0, carryMeter = 0): void {
+function startLevel(n: number, carryScore = 0, smokerSlots?: CookSlot[][], carryFailed = 0, thresholdsUnlocked = 0, carryMeter = 0): void {
   if (n === 1) {
     incrementStat(isCoop ? 'coop_sessions' : 'solo_sessions', 1);
     runSales = 0; runCOGS = 0; runLabor = 0; runWaste = 0; runOverhead = 0; runCompleted = 0; runFailed = 0;
@@ -998,13 +998,13 @@ function loop(now: number): void {
     if (!isTutorial && _projLv > _claimedLv) {
       const _snapGsLevel = gs.level;
       const _snapScore   = gs.score;
-      const _snapSmoker  = gs.stations.find(s => s.kind === 'smoker');
+      const _snapSmoker  = gs.stations.filter(s => s.kind === 'smoker');
       const _snapFailed  = gs.failed;
       const _snapThresh  = gs.thresholdsUnlocked;
       const _snapMeter   = gs.meter;
       showLevelRewardModal(_claimedLv, _projLv, () => {
         if (_snapGsLevel < LEVELS.length) {
-          startLevel(_snapGsLevel + 1, _snapScore, _snapSmoker?.slots.map(sl => ({ ...sl })), Math.max(0, _snapFailed - 1), _snapThresh, _snapMeter);
+          startLevel(_snapGsLevel + 1, _snapScore, _snapSmoker.map(s => s.slots.map(sl => ({ ...sl }))), Math.max(0, _snapFailed - 1), _snapThresh, _snapMeter);
         } else {
           goToNameEntry(gs!); requestAnimationFrame(loop);
         }
@@ -1012,8 +1012,8 @@ function loop(now: number): void {
       return;
     }
     if (gs.level < LEVELS.length) {
-      const smoker = gs.stations.find(s => s.kind === 'smoker');
-      startLevel(gs.level+1, gs.score, smoker?.slots.map(sl=>({...sl})), Math.max(0,gs.failed-1), gs.thresholdsUnlocked, gs.meter);
+      const smokers = gs.stations.filter(s => s.kind === 'smoker');
+      startLevel(gs.level+1, gs.score, smokers.map(s=>s.slots.map(sl=>({...sl}))), Math.max(0,gs.failed-1), gs.thresholdsUnlocked, gs.meter);
       if (isTutorial && gs) {
         gs.tutorialOrderQueue = [];
         gs.levelTimer = 9999999;
