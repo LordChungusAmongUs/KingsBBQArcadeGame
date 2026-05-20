@@ -42,12 +42,14 @@ export interface Order {
   status: 'active' | 'plating' | 'failed';
   spoilTimer: number;  // ms since first partial item placed; resets done flags when it expires
   burnedCount: number; // overcooked items added to this order (each costs 50%/totalItems)
+  prepTableId: string | null; // which prep table is building this order (null = unclaimed)
 }
 
 export interface HeldItem {
   food: FoodId;
   count: number;
   burned: boolean;
+  plateTableId?: string; // set when carrying a PLATE_SENTINEL, tracks which table's plate
 }
 
 export interface Player {
@@ -66,6 +68,7 @@ export interface Plate {
   orderId: number;
   name: string;
   spoilTimer: number;
+  tableId: string; // which prep table this plate was completed on
 }
 
 export interface StagedItem {
@@ -73,6 +76,7 @@ export interface StagedItem {
   spoilTimer: number;
   spoiled: boolean;
   count: number;   // uses remaining (fries/rings start at 2, others at 1)
+  tableId: string; // which prep table this item belongs to
 }
 
 export interface GameState {

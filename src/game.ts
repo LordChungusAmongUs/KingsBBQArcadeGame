@@ -422,7 +422,7 @@ function tickOrders(gs: GameState, dt: number): void {
       if (o.spoilTimer >= PARTIAL_SPOIL_TIME) {
         for (const item of o.items) {
           if (item.done) {
-            gs.staged.push({ food: item.food, spoilTimer: 0, spoiled: true, count: 1 });
+            gs.staged.push({ food: item.food, spoilTimer: 0, spoiled: true, count: 1, tableId: o.prepTableId ?? 'prep' });
             item.done = false;
           }
         }
@@ -551,7 +551,7 @@ function tickStaged(gs: GameState, dt: number): void {
   }
 
 
-  // Auto-apply non-spoiled staged items to active orders
+  // Auto-apply non-spoiled staged items to active orders (respects table ownership)
   for (const o of gs.orders) {
     if (o.status !== 'active') continue;
     for (const item of o.items) {
@@ -561,14 +561,17 @@ function tickStaged(gs: GameState, dt: number): void {
       const lgBase: FoodId | null = item.food === 'fries_lg' ? 'fries'
                                   : item.food === 'rings_lg'  ? 'rings' : null;
       if (lgBase !== null) {
-        const idx = gs.staged.findIndex(si => !si.spoiled && si.food === lgBase && si.count >= 2);
+        const idx = gs.staged.findIndex(si =>
+          !si.spoiled && si.food === lgBase && si.count >= 2 &&
+          (o.prepTableId === null || o.prepTableId === si.tableId));
         if (idx !== -1) {
+          if (o.prepTableId === null) o.prepTableId = gs.staged[idx].tableId;
           item.done = true;
           gs.staged[idx].count -= 2;
           if (gs.staged[idx].count <= 0) gs.staged.splice(idx, 1);
           if (o.items.every(i => i.done)) {
             o.status = 'plating';
-            gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
+            gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer, tableId: o.prepTableId! });
             incrementStat('plates_completed', 1);
             xpBreakdown.orders += awardXP(1);
           }
@@ -577,15 +580,18 @@ function tickStaged(gs: GameState, dt: number): void {
       }
 
       // Normal: exact food match, uses 1 count
-      const idx = gs.staged.findIndex(si => !si.spoiled && si.food === item.food);
+      const idx = gs.staged.findIndex(si =>
+        !si.spoiled && si.food === item.food &&
+        (o.prepTableId === null || o.prepTableId === si.tableId));
       if (idx !== -1) {
+        if (o.prepTableId === null) o.prepTableId = gs.staged[idx].tableId;
         item.done = true;
         const si = gs.staged[idx];
         si.count--;
         if (si.count <= 0) gs.staged.splice(idx, 1);
         if (o.items.every(i => i.done)) {
           o.status = 'plating';
-          gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
+          gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer, tableId: o.prepTableId! });
           incrementStat('plates_completed', 1);
           xpBreakdown.orders += awardXP(1);
         }
@@ -656,6 +662,7 @@ function spawnOrder(gs: GameState): void {
     status: 'active',
     spoilTimer: 0,
     burnedCount: 0,
+    prepTableId: null,
   });
 }
 
@@ -1041,12 +1048,13 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
   // ── Prep table ──
   if (s.kind === 'prep') {
     if (p.held === null) {
-      // Pick up completed plate first, then a spoiled item
-      if (gs.plates.length > 0) {
-        p.held = { food: PLATE_SENTINEL, count: 1, burned: false };
+      // Pick up completed plate from THIS table, then a spoiled item from THIS table
+      const plateIdx = gs.plates.findIndex(pl => pl.tableId === s.id);
+      if (plateIdx !== -1) {
+        p.held = { food: PLATE_SENTINEL, count: 1, burned: false, plateTableId: s.id };
         return;
       }
-      const spoiledIdx = gs.staged.findIndex(si => si.spoiled);
+      const spoiledIdx = gs.staged.findIndex(si => si.spoiled && si.tableId === s.id);
       if (spoiledIdx !== -1) {
         const si = gs.staged.splice(spoiledIdx, 1)[0];
         p.held = { food: si.food, count: 1, burned: true };
@@ -1055,34 +1063,36 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
     }
     // Carrying a plate — go to counter
     if (p.held.food === PLATE_SENTINEL) return;
-    // Stack a spoiled item onto a matching burned held item
+    // Stack a spoiled item from THIS table onto a matching burned held item
     if (p.held.burned) {
-      const spoiledIdx = gs.staged.findIndex(si => si.spoiled && si.food === p.held!.food && p.held!.count < MS);
+      const spoiledIdx = gs.staged.findIndex(si => si.spoiled && si.food === p.held!.food && p.held!.count < MS && si.tableId === s.id);
       if (spoiledIdx !== -1) {
         gs.staged.splice(spoiledIdx, 1);
         p.held.count++;
       }
       return;
     }
-    // Drop a cooked (non-burned) item onto an active order or stage it
+    // Drop a cooked (non-burned) item onto an order claimed by this table (or unclaimed)
     const def = FOOD.get(p.held.food);
     if (def && !def.isRaw && p.held.food !== 'whole_pork') {
       for (const o of gs.orders) {
         if (o.status !== 'active') continue;
+        if (o.prepTableId !== null && o.prepTableId !== s.id) continue; // claimed by other table
         const slot = o.items.find(i => i.food === p.held!.food && !i.done);
         if (slot) {
+          if (o.prepTableId === null) o.prepTableId = s.id; // claim this order for this table
           const food = p.held!.food;
           slot.done = true;
           p.held.count--;
           if (p.held.count <= 0) p.held = null;
           if (food === 'fries' || food === 'rings') {
-            gs.staged.push({ food, spoilTimer: 0, spoiled: false, count: 1 });
+            gs.staged.push({ food, spoilTimer: 0, spoiled: false, count: 1, tableId: s.id });
           }
           { const xp = awardXP(1); xpBreakdown.orders += xp;
             spawnFloat(p.x, p.y - 30, `+${xp} XP`, '#6af'); }
           if (o.items.every(i => i.done)) {
             o.status = 'plating';
-            gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer });
+            gs.plates.push({ orderId: o.id, name: o.name, spoilTimer: o.spoilTimer, tableId: s.id });
             incrementStat('plates_completed', 1);
             { const xp = awardXP(1); xpBreakdown.orders += xp;
               spawnFloat(p.x, p.y - 50, `+${xp} XP (plate!)`, '#adf'); }
@@ -1090,10 +1100,10 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
           return;
         }
       }
-      // No order needs it yet — stage it on the prep table (max 16 items across both tables)
-      if (gs.staged.length >= 16) return;
+      // No matching order — stage on THIS table (max 8 items per table)
+      if (gs.staged.filter(si => si.tableId === s.id).length >= 8) return;
       const stageCount = (p.held.food === 'fries' || p.held.food === 'rings') ? 2 : 1;
-      gs.staged.push({ food: p.held.food, spoilTimer: 0, spoiled: false, count: stageCount });
+      gs.staged.push({ food: p.held.food, spoilTimer: 0, spoiled: false, count: stageCount, tableId: s.id });
       { const xp = awardXP(1); xpBreakdown.orders += xp;
         spawnFloat(p.x, p.y - 30, `+${xp} XP`, '#6af'); }
       p.held.count--;
@@ -1115,7 +1125,10 @@ function doInteract(gs: GameState, playerNum: 1 | 2 | 3 | 4 = 1): void {
   // ── Counter ──
   if (s.kind === 'counter') {
     if (p.held?.food === PLATE_SENTINEL && gs.plates.length > 0) {
-      const plate = gs.plates.shift()!;
+      const tableId = p.held.plateTableId;
+      const plateIdx = tableId ? gs.plates.findIndex(pl => pl.tableId === tableId) : 0;
+      if (plateIdx === -1) return;
+      const plate = gs.plates.splice(plateIdx, 1)[0];
       const order = gs.orders.find(o => o.id === plate.orderId);
       if (order) {
         const price = MEAL_PRICES[order.name] ?? 0;

@@ -580,7 +580,9 @@ function drawPrepTable(gs: GameState, s: Station): void {
   let slotX = s.x + 6;
   const slotY = s.y + 7;
 
-  const partials = gs.orders.filter(o => o.status === 'active' && o.items.some(i => i.done));
+  const partials = gs.orders.filter(o => o.status === 'active' && o.items.some(i => i.done) && o.prepTableId === s.id);
+  const myPlates = gs.plates.filter(pl => pl.tableId === s.id);
+  const myStaged = gs.staged.filter(si => si.tableId === s.id);
 
   // Partial plates
   for (const o of partials) {
@@ -594,9 +596,9 @@ function drawPrepTable(gs: GameState, s: Station): void {
     ctx.lineWidth = 1;
     ctx.strokeRect(slotX, slotY, CARD_W, CARD_H);
 
-    // Order name
+    // Ticket number
     ctx.fillStyle = '#99a'; ctx.font = '7px monospace'; ctx.textAlign = 'left';
-    ctx.fillText(o.name.slice(0, 11), slotX + 4, slotY + 9);
+    ctx.fillText('#' + String(o.id).padStart(3, '0'), slotX + 4, slotY + 9);
 
     // Plate oval
     const plateCY = slotY + CARD_H / 2 - 4;
@@ -630,7 +632,7 @@ function drawPrepTable(gs: GameState, s: Station): void {
   }
 
   // Completed ready-to-serve plates
-  for (const plate of gs.plates) {
+  for (const plate of myPlates) {
     if (slotX + CARD_W > s.x + s.w) break;
 
     const plateFrac = Math.min(1, plate.spoilTimer / STAGED_SPOIL_TIME);
@@ -649,7 +651,7 @@ function drawPrepTable(gs: GameState, s: Station): void {
     ctx.fillStyle = plateUrgent ? '#f84' : '#4f4'; ctx.font = 'bold 8px monospace'; ctx.textAlign = 'center';
     ctx.fillText('★ READY', slotX + CARD_W / 2, slotY + CARD_H - 18);
     ctx.fillStyle = '#bbb'; ctx.font = '7px monospace';
-    ctx.fillText(plate.name.slice(0, 10), slotX + CARD_W / 2, slotY + 10);
+    ctx.fillText('#' + String(plate.orderId).padStart(3, '0'), slotX + CARD_W / 2, slotY + 10);
 
     const barY = slotY + CARD_H - 9;
     ctx.fillStyle = '#222'; ctx.fillRect(slotX + 4, barY, CARD_W - 8, 5);
@@ -662,7 +664,7 @@ function drawPrepTable(gs: GameState, s: Station): void {
 
   // Staged items — good (green timer) and spoiled (red, must trash)
   const TOKEN = 36;
-  for (const si of gs.staged) {
+  for (const si of myStaged) {
     if (slotX + TOKEN > s.x + s.w) break;
     const def = FOOD.get(si.food);
 
@@ -697,7 +699,7 @@ function drawPrepTable(gs: GameState, s: Station): void {
     slotX += TOKEN + 3;
   }
 
-  if (partials.length === 0 && gs.plates.length === 0 && gs.staged.length === 0) {
+  if (partials.length === 0 && myPlates.length === 0 && myStaged.length === 0) {
     ctx.fillStyle = '#444'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
     ctx.fillText('prep table', s.x + s.w / 2, s.y + s.h / 2 + 4);
   }

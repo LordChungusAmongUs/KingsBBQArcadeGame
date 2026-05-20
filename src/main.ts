@@ -772,7 +772,7 @@ const TUTORIAL_STEPS: TutorialStep[] = [
     sub: 'That leftover fry is going bad — watch the timer bar on the prep table!',
     onEnter: gs => {
       gs.staged = gs.staged.filter(s => s.food !== 'fries');
-      gs.staged.push({ food: 'fries', spoilTimer: STAGED_SPOIL_TIME - 4000, spoiled: false, count: 1 });
+      gs.staged.push({ food: 'fries', spoilTimer: STAGED_SPOIL_TIME - 4000, spoiled: false, count: 1, tableId: 'prep' });
     },
     done: gs => gs.staged.some(s => s.food === 'fries' && s.spoiled) },
   // Modal auto-pops when fries spoil; player must pick them up and trash them
