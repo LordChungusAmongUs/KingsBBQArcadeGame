@@ -72,30 +72,33 @@ export function buildStations(): Station[] {
     },
 
     // ── Left wall: 2 smokers + 2 warmers ─────────────────────────────────────
+    // x=10, w=100 → right edge=110; gap to grill1 (x=170) = 60px so the
+    // player (radius 18, needs 36px) can walk the corridor to reach them.
+    // Vertical gaps of 50px between stations for the same reason.
     {
       id: 'smoker', kind: 'smoker',
-      x: KX - 130, y: KY + 10, w: 120, h: 100,
+      x: 10, y: KY + 10, w: 100, h: 65,
       label: 'SMOKER 1', color: '#543',
       slotRows: 2,
       slots: Array.from({ length: 4 }, () => slot()),
     },
     {
       id: 'smoker2', kind: 'smoker',
-      x: KX - 130, y: KY + 120, w: 120, h: 100,
+      x: 10, y: KY + 125, w: 100, h: 65,
       label: 'SMOKER 2', color: '#543',
       slotRows: 2,
       slots: Array.from({ length: 4 }, () => slot()),
     },
     {
       id: 'warmer', kind: 'warmer',
-      x: KX - 130, y: KY + 234, w: 120, h: 85,
+      x: 10, y: KY + 240, w: 100, h: 65,
       label: 'WARMER 1', color: '#7a4020',
       slotRows: 2,
       slots: Array.from({ length: 4 }, () => slot()),
     },
     {
       id: 'warmer2', kind: 'warmer',
-      x: KX - 130, y: KY + 329, w: 120, h: 85,
+      x: 10, y: KY + 355, w: 100, h: 65,
       label: 'WARMER 2', color: '#7a4020',
       slotRows: 2,
       slots: Array.from({ length: 4 }, () => slot()),
