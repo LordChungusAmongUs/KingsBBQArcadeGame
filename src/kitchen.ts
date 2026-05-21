@@ -105,28 +105,36 @@ export function buildStations(): Station[] {
     },
 
     // ── Front wall (left → right) ─────────────────────────────────────────────
-    {
-      id: 'trash', kind: 'trash',
-      x: 155, y: KY + KH - 98, w: 58, h: 90,
-      label: 'TRASH', color: '#333',
-      slots: [],
-    },
+    // Total span x=155–967 (812 px). Station widths: 100+58+184+184+58+118=702.
+    // Remaining 110 px ÷ 5 gaps = 22 px each → perfectly equal spacing.
     {
       id: 'chop', kind: 'chop',
-      x: 351, y: KY + KH - 98, w: 100, h: 90,
+      x: 155, y: KY + KH - 98, w: 100, h: 90,
       label: 'CHOP', color: '#765',
       slots: [],
     },
     {
+      id: 'trash', kind: 'trash',
+      x: 277, y: KY + KH - 98, w: 58, h: 90,
+      label: 'TRASH', color: '#333',
+      slots: [],
+    },
+    {
       id: 'prep', kind: 'prep',
-      x: 461, y: KY + KH - 98, w: 184, h: 90,
+      x: 357, y: KY + KH - 98, w: 184, h: 90,
       label: 'PREP 1', color: '#484',
       slots: [],
     },
     {
       id: 'prep2', kind: 'prep',
-      x: 655, y: KY + KH - 98, w: 184, h: 90,
+      x: 563, y: KY + KH - 98, w: 184, h: 90,
       label: 'PREP 2', color: '#484',
+      slots: [],
+    },
+    {
+      id: 'trash2', kind: 'trash',
+      x: 769, y: KY + KH - 98, w: 58, h: 90,
+      label: 'TRASH', color: '#333',
       slots: [],
     },
     {
